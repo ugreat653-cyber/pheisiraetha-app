@@ -1,4 +1,4 @@
-const CACHE='pheisiraetha-v06';
+const CACHE='pheisiraetha-v07';
 
 const ASSETS=[
   './',
@@ -6,12 +6,12 @@ const ASSETS=[
   './app.css',
   './launch.js',
   './app.js',
-  './manifest.webmanifest',
+  './manifest.webmanifest?v=07',
   './launch-screen.jpg',
-  './icon-192.png',
-  './icon-512.png',
-  './icon-maskable-192.png',
-  './icon-maskable-512.png'
+  './icon-192.png?v=07',
+  './icon-512.png?v=07',
+  './icon-maskable-192.png?v=07',
+  './icon-maskable-512.png?v=07'
 ];
 
 self.addEventListener('install',e=>

@@ -1,25 +1,42 @@
 (() => {
   const launchScreen = document.getElementById('launchScreen');
+  const launchImage = launchScreen?.querySelector('.launch-screen__image');
 
-  if (!launchScreen) return;
+  if (!launchScreen) {
+    document.body.classList.remove('is-launching');
+    return;
+  }
 
-  const startedAt = performance.now();
-  const minimumVisibleMs = 1200;
+  const minimumVisibleMs = 5000;
 
   const dismiss = () => {
-    const elapsed = performance.now() - startedAt;
-    const delay = Math.max(0, minimumVisibleMs - elapsed);
+    launchScreen.classList.add('launch-screen--hidden');
 
-    window.setTimeout(() => {
-      launchScreen.classList.add('launch-screen--hidden');
+    const remove = () => {
+      launchScreen.remove();
+      document.body.classList.remove('is-launching');
+    };
 
-      const remove = () => launchScreen.remove();
-
-      launchScreen.addEventListener('transitionend', remove, { once: true });
-      window.setTimeout(remove, 700);
-    }, delay);
+    launchScreen.addEventListener('transitionend', remove, { once: true });
+    window.setTimeout(remove, 900);
   };
 
-  if (document.readyState === 'complete') dismiss();
-  else window.addEventListener('load', dismiss, { once: true });
+  const pageReady = document.readyState === 'complete'
+    ? Promise.resolve()
+    : new Promise(resolve => window.addEventListener('load', resolve, { once: true }));
+
+  const imageReady = !launchImage || launchImage.complete
+    ? Promise.resolve()
+    : new Promise(resolve => {
+        launchImage.addEventListener('load', resolve, { once: true });
+        launchImage.addEventListener('error', resolve, { once: true });
+      });
+
+  const splashPainted = () => new Promise(resolve => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+  });
+
+  Promise.all([pageReady, imageReady])
+    .then(splashPainted)
+    .then(() => window.setTimeout(dismiss, minimumVisibleMs));
 })();
