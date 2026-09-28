@@ -282,7 +282,14 @@
     wizard = {
       step:1,
 
-      cie:{...r},
+      cie:{
+        primary:'',
+        success:'',
+        scope:'',
+        nonGoals:'',
+        constraints:'',
+        rationale:''
+      },
 
       iep:{
         desire:5,
