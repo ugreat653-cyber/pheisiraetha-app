@@ -51,6 +51,7 @@
       emotions:['Love / affection','Joy / excitement','Hope / positive anticipation','Calm / contentment','Fear / anxiety','Anger / frustration','Sadness / disappointment','Shame / guilt','Neutral / little emotion','Other'],
       testNote:'Prototype v0.1 — designed for self-test before public beta.'
     },
+
     ru: {
       brand:'PHEISIRAETHA', home:'Главная', history:'История', data:'Данные',
       local:'Локальный приватный прототип', title:'Преврати намерение в отслеживаемый цикл.',
@@ -97,21 +98,56 @@
   };
 
   const fresh = () => ({ version: APP_VERSION, lang:'ru', intent:null });
+
   let state = load();
   let view = 'home';
   let wizard = null;
 
   function load(){
-    try { const x = JSON.parse(localStorage.getItem(STORAGE_KEY)); return x && x.version ? x : fresh(); }
-    catch { return fresh(); }
+    try {
+      const x = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      return x && x.version ? x : fresh();
+    } catch {
+      return fresh();
+    }
   }
-  function persist(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
-  function t(k){ return T[state.lang]?.[k] ?? T.en[k] ?? k; }
-  function dateLabel(iso){ return new Intl.DateTimeFormat(state.lang==='ru'?'ru-RU':'en-GB',{dateStyle:'medium',timeStyle:'short'}).format(new Date(iso)); }
+
+  function persist(){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  function t(k){
+    return T[state.lang]?.[k] ?? T.en[k] ?? k;
+  }
+
+  function dateLabel(iso){
+    return new Intl.DateTimeFormat(
+      state.lang==='ru' ? 'ru-RU' : 'en-GB',
+      {dateStyle:'medium', timeStyle:'short'}
+    ).format(new Date(iso));
+  }
+
+  function cycleLabel(n){
+    if(state.lang!=='ru') return n===1 ? 'cycle' : 'cycles';
+
+    const mod10 = n % 10;
+    const mod100 = n % 100;
+
+    if(mod10===1 && mod100!==11) return 'цикл';
+
+    if(
+      mod10>=2 &&
+      mod10<=4 &&
+      (mod100<12 || mod100>14)
+    ) return 'цикла';
+
+    return 'циклов';
+  }
 
   function shell(content){
     return `<div class="shell"><header class="topbar"><div class="brand">PHEISIRAETHA</div><button class="lang" id="langBtn">${state.lang==='ru'?'RU':'EN'}</button></header><main>${content}</main>${bottomNav()}</div>`;
   }
+
   function bottomNav(){
     return `<nav class="bottomnav">
       <button data-nav="home" class="${view==='home'?'active':''}">${t('home')}</button>
@@ -122,137 +158,1103 @@
 
   function render(){
     const app = document.getElementById('app');
-    if (view==='ris') app.innerHTML = shell(renderRIS());
-    else if (view==='wizard') app.innerHTML = shell(renderWizard());
-    else if (view==='history') app.innerHTML = shell(renderHistory());
-    else if (view==='data') app.innerHTML = shell(renderData());
+
+    if(view==='ris') app.innerHTML = shell(renderRIS());
+    else if(view==='wizard') app.innerHTML = shell(renderWizard());
+    else if(view==='history') app.innerHTML = shell(renderHistory());
+    else if(view==='data') app.innerHTML = shell(renderData());
     else app.innerHTML = shell(renderHome());
+
     bindCommon();
-    if (view==='ris') bindRIS();
-    if (view==='wizard') bindWizard();
-    if (view==='data') bindData();
+
+    if(view==='ris') bindRIS();
+    if(view==='wizard') bindWizard();
+    if(view==='data') bindData();
   }
 
   function renderHome(){
-    if (!state.intent) return `<section class="hero"><span class="kicker">${t('local')}</span><h1>${t('title')}</h1><p class="muted">${t('intro')}</p></section>
+
+    if(!state.intent)
+      return `<section class="hero"><span class="kicker">${t('local')}</span><h1>${t('title')}</h1><p class="muted">${t('intro')}</p></section>
       <div class="card empty"><h2>${t('noGoal')}</h2><button class="btn primary" id="createGoal">${t('createGoal')}</button></div>
       <div class="notice smalltext">${t('disclaimer')}</div>`;
+
     const c = state.intent.cycles || [];
     const last = c[c.length-1];
+
     return `<section class="hero"><span class="kicker">${t('activeGoal')}</span><h1>${esc(state.intent.ris.primary)}</h1><p class="muted">${esc(state.intent.ris.success)}</p></section>
+
       <div class="grid">
         <button class="btn primary" id="startCheckin">${t('checkin')}</button>
         <button class="btn secondary" id="editGoal">${t('editIntent')}</button>
       </div>
-      <div class="card flat"><div class="row"><h2>${t('ris')}</h2><span class="pill">${c.length} ${t('cycles')}</span></div>
+
+      <div class="card flat">
+        <div class="row">
+          <h2>${t('ris')}</h2>
+          <span class="pill">${c.length} ${cycleLabel(c.length)}</span>
+        </div>
         ${risSummary(state.intent.ris)}
       </div>
-      ${last ? `<div class="card"><h2>${t('summary')}</h2><div class="grid"><div class="metric"><span>${t('achieved')}</span><strong>${last.oop.achievement}/10</strong></div><div class="metric"><span>${t('desireShort')}</span><strong>${last.iep.desire}/10</strong></div><div class="metric"><span>${t('mentalShort')}</span><strong>${last.iep.mental}/10</strong></div><div class="metric"><span>${t('practicalShort')}</span><strong>${last.iep.practical}/10</strong></div></div></div>`:''}
+
+      ${last ? `
+      <div class="card">
+        <h2>${t('summary')}</h2>
+        <div class="grid">
+
+          <div class="metric">
+            <span>${t('achieved')}</span>
+            <strong>${last.oop.achievement}/10</strong>
+          </div>
+
+          <div class="metric">
+            <span>${t('desireShort')}</span>
+            <strong>${last.iep.desire}/10</strong>
+          </div>
+
+          <div class="metric">
+            <span>${t('mentalShort')}</span>
+            <strong>${last.iep.mental}/10</strong>
+          </div>
+
+          <div class="metric">
+            <span>${t('practicalShort')}</span>
+            <strong>${last.iep.practical}/10</strong>
+          </div>
+
+        </div>
+      </div>` : ''}
+
       <div class="notice smalltext">${t('recommended')}</div>`;
   }
 
-  function risSummary(r){ return `<p><strong>${t('success')}:</strong> ${esc(r.success)}</p><p><strong>${t('scope')}:</strong> ${esc(r.scope)}</p><p><strong>${t('nonGoals')}:</strong> ${esc(r.nonGoals)}</p><p><strong>${t('constraints')}:</strong> ${esc(r.constraints)}</p><p><strong>${t('rationale')}:</strong> ${esc(r.rationale)}</p>`; }
+  function risSummary(r){
+    return `
+      <p><strong>${t('success')}:</strong> ${esc(r.success)}</p>
+      <p><strong>${t('scope')}:</strong> ${esc(r.scope)}</p>
+      <p><strong>${t('nonGoals')}:</strong> ${esc(r.nonGoals)}</p>
+      <p><strong>${t('constraints')}:</strong> ${esc(r.constraints)}</p>
+      <p><strong>${t('rationale')}:</strong> ${esc(r.rationale)}</p>
+    `;
+  }
 
-  function field(key, value='', helpKey){ return `<label for="${key}">${t(key)}</label><textarea id="${key}">${esc(value)}</textarea>${helpKey?`<div class="help">${t(helpKey)}</div>`:''}`; }
+  function field(key, value='', helpKey){
+    return `<label for="${key}">${t(key)}</label>
+    <textarea id="${key}">${esc(value)}</textarea>
+    ${helpKey ? `<div class="help">${t(helpKey)}</div>` : ''}`;
+  }
+
   function renderRIS(){
-    const r = state.intent?.ris || {primary:'',success:'',scope:'',nonGoals:'',constraints:'',rationale:''};
-    return `<div class="row"><h1>${t('ris')}</h1><button class="btn secondary small" id="risCancel">${t('cancel')}</button></div><div class="card flat">
-      ${field('primary',r.primary,'primaryHelp')}${field('success',r.success,'successHelp')}${field('scope',r.scope,'scopeHelp')}${field('nonGoals',r.nonGoals,'nonGoalsHelp')}${field('constraints',r.constraints,'constraintsHelp')}${field('rationale',r.rationale,'rationaleHelp')}
-      <button class="btn primary" id="risSave" style="margin-top:18px">${t('save')}</button><div id="risMsg" class="help"></div></div>`;
+
+    const r = state.intent?.ris || {
+      primary:'',
+      success:'',
+      scope:'',
+      nonGoals:'',
+      constraints:'',
+      rationale:''
+    };
+
+    return `<div class="row">
+      <h1>${t('ris')}</h1>
+      <button class="btn secondary small" id="risCancel">${t('cancel')}</button>
+    </div>
+
+    <div class="card flat">
+
+      ${field('primary',r.primary,'primaryHelp')}
+      ${field('success',r.success,'successHelp')}
+      ${field('scope',r.scope,'scopeHelp')}
+      ${field('nonGoals',r.nonGoals,'nonGoalsHelp')}
+      ${field('constraints',r.constraints,'constraintsHelp')}
+      ${field('rationale',r.rationale,'rationaleHelp')}
+
+      <button class="btn primary" id="risSave" style="margin-top:18px">${t('save')}</button>
+
+      <div id="risMsg" class="help"></div>
+    </div>`;
   }
 
   function startWizard(){
+
     const r = state.intent.ris;
-    wizard = {step:1, cie:{...r}, iep:{desire:5,belief:5,emotion:t('emotions')[2],emotionIntensity:5,mental:5,practical:5,frequency:'freq2',actions:'',hours:0}, oop:{currentState:'',achievement:0,events:'',direction:'none',evidence:[],external:''}, intentional:'no', selected:[], revision:{}};
-    view='wizard'; render();
+
+    wizard = {
+      step:1,
+
+      cie:{...r},
+
+      iep:{
+        desire:5,
+        belief:5,
+        emotion:t('emotions')[2],
+        emotionIntensity:5,
+        mental:5,
+        practical:5,
+        frequency:'freq2',
+        actions:'',
+        hours:0
+      },
+
+      oop:{
+        currentState:'',
+        achievement:0,
+        events:'',
+        direction:'none',
+        evidence:[],
+        external:''
+      },
+
+      intentional:'no',
+      selected:[],
+      revision:{}
+    };
+
+    view='wizard';
+    render();
   }
 
   function renderWizard(){
-    const labels = [t('cie'),t('iep'),t('oop'),t('revise')];
+
+    const labels = [
+      t('cie'),
+      t('iep'),
+      t('oop'),
+      t('revise')
+    ];
+
     const step = wizard.step;
+
     let body='';
+
     if(step===1) body = renderCIE();
     if(step===2) body = renderIEP();
     if(step===3) body = renderOOP();
     if(step===4) body = renderRevision();
-    return `<div class="row"><div><span class="kicker">${labels[step-1]}</span><h1>${labels[step-1]}</h1></div><button class="btn secondary small" id="wizCancel">${t('cancel')}</button></div>
-      <div class="progress"><span style="width:${step*25}%"></span></div>${body}`;
+
+    return `<div class="row">
+
+      <div>
+        <span class="kicker">${labels[step-1]}</span>
+        <h1>${labels[step-1]}</h1>
+      </div>
+
+      <button class="btn secondary small" id="wizCancel">${t('cancel')}</button>
+
+    </div>
+
+    <div class="progress">
+      <span style="width:${step*25}%"></span>
+    </div>
+
+    ${body}`;
   }
 
-  function renderCIE(){ const r=wizard.cie; return `<p class="muted">${t('cieIntro')}</p><div class="card flat">${field('primary',r.primary,'primaryHelp')}${field('success',r.success,'successHelp')}${field('scope',r.scope,'scopeHelp')}${field('nonGoals',r.nonGoals,'nonGoalsHelp')}${field('constraints',r.constraints,'constraintsHelp')}${field('rationale',r.rationale,'rationaleHelp')}<button class="btn primary" id="wizNext" style="margin-top:18px">${t('next')}</button></div>`; }
-  function range(id,label,val){ return `<label>${label}</label><div class="range-line"><input type="range" min="0" max="10" step="1" id="${id}" value="${val}"><span class="range-value" id="${id}Val">${val}</span></div>`; }
-  function renderIEP(){ const x=wizard.iep; const ems=t('emotions'); return `<div class="card flat">
-    ${range('desire',t('desire'),x.desire)}${range('belief',t('belief'),x.belief)}
-    <label>${t('emotion')}</label><select id="emotion">${ems.map(e=>`<option ${e===x.emotion?'selected':''}>${esc(e)}</option>`).join('')}</select>
-    ${range('emotionIntensity',t('emotionIntensity'),x.emotionIntensity)}${range('mental',t('mental'),x.mental)}${range('practical',t('practical'),x.practical)}
-    <label>${t('frequency')}</label><select id="frequency">${['freq0','freq1','freq2','freq3','freq4','freq5'].map(k=>`<option value="${k}" ${k===x.frequency?'selected':''}>${t(k)}</option>`).join('')}</select>
-    <label>${t('actions')}</label><textarea id="actions">${esc(x.actions)}</textarea><label>${t('hours')}</label><input type="number" min="0" max="168" step="0.25" id="hours" value="${x.hours}">
-    <div class="grid" style="margin-top:18px"><button class="btn secondary" id="wizBack">${t('back')}</button><button class="btn primary" id="wizNext">${t('next')}</button></div></div>`; }
-  function renderOOP(){ const x=wizard.oop; const evid=[['direct','evidenceDirect'],['documented','evidenceDocumented'],['otherPerson','evidenceOtherPerson'],['subjective','evidenceSubjective'],['insufficient','evidenceInsufficient'],['other','evidenceOther']]; return `<div class="card flat">
-    <label>${t('currentState')}</label><textarea id="currentState">${esc(x.currentState)}</textarea>${range('achievement',t('achievement'),x.achievement)}
-    <label>${t('events')}</label><textarea id="events">${esc(x.events)}</textarea><label>${t('direction')}</label><select id="direction"><option value="toward" ${x.direction==='toward'?'selected':''}>${t('directionToward')}</option><option value="none" ${x.direction==='none'?'selected':''}>${t('directionNone')}</option><option value="away" ${x.direction==='away'?'selected':''}>${t('directionAway')}</option><option value="mixed" ${x.direction==='mixed'?'selected':''}>${t('directionMixed')}</option><option value="unknown" ${x.direction==='unknown'?'selected':''}>${t('directionUnknown')}</option></select>
-    <label>${t('evidence')}</label>${evid.map(([v,k])=>`<div class="choice"><input type="checkbox" data-evidence="${v}" ${x.evidence.includes(v)?'checked':''}><span>${t(k)}</span></div>`).join('')}
-    <label>${t('external')}</label><textarea id="external">${esc(x.external)}</textarea><div class="grid" style="margin-top:18px"><button class="btn secondary" id="wizBack">${t('back')}</button><button class="btn primary" id="wizNext">${t('next')}</button></div></div>`; }
-  function renderRevision(){ const dims=[['primary','primary'],['success','success'],['scope','scope'],['nonGoals','nonGoals'],['constraints','constraints'],['rationale','rationale']]; return `<div class="card flat"><label>${t('intentional')}</label>${[['yes','yes'],['no','no'],['unsure','unsure']].map(([v,k])=>`<div class="choice"><input type="radio" name="intentional" value="${v}" ${wizard.intentional===v?'checked':''}><span>${t(k)}</span></div>`).join('')}
-    <div id="revisionBox" class="${wizard.intentional==='yes'?'':'hidden'}"><div class="divider"></div><label>${t('changedParts')}</label><div class="help">${t('revisionHelp')}</div>${dims.map(([v,k])=>`<div class="choice"><input type="checkbox" data-dim="${v}" ${wizard.selected.includes(v)?'checked':''}><span>${t(k)}</span></div>`).join('')}<div id="revisionFields">${renderRevisionFields()}</div></div>
-    <div class="grid" style="margin-top:18px"><button class="btn secondary" id="wizBack">${t('back')}</button><button class="btn primary" id="wizComplete">${t('complete')}</button></div><div id="wizMsg" class="help"></div></div>`; }
-  function renderRevisionFields(){ if(wizard.intentional!=='yes') return ''; return wizard.selected.map(k=>`<label>${t(k)}</label><textarea data-revision="${k}">${esc(wizard.revision[k] ?? wizard.cie[k] ?? '')}</textarea>`).join(''); }
+  function renderCIE(){
+
+    const r=wizard.cie;
+
+    return `<p class="muted">${t('cieIntro')}</p>
+
+    <div class="card flat">
+
+      ${field('primary',r.primary,'primaryHelp')}
+      ${field('success',r.success,'successHelp')}
+      ${field('scope',r.scope,'scopeHelp')}
+      ${field('nonGoals',r.nonGoals,'nonGoalsHelp')}
+      ${field('constraints',r.constraints,'constraintsHelp')}
+      ${field('rationale',r.rationale,'rationaleHelp')}
+
+      <button class="btn primary" id="wizNext" style="margin-top:18px">${t('next')}</button>
+
+    </div>`;
+  }
+
+  function range(id,label,val){
+
+    return `<label>${label}</label>
+
+    <div class="range-line">
+
+      <input
+        type="range"
+        min="0"
+        max="10"
+        step="1"
+        id="${id}"
+        value="${val}"
+      >
+
+      <span class="range-value" id="${id}Val">${val}</span>
+
+    </div>`;
+  }
+
+  function renderIEP(){
+
+    const x=wizard.iep;
+
+    const ems=t('emotions');
+
+    return `<div class="card flat">
+
+      ${range('desire',t('desire'),x.desire)}
+      ${range('belief',t('belief'),x.belief)}
+
+      <label>${t('emotion')}</label>
+
+      <select id="emotion">
+        ${ems.map(e=>`<option ${e===x.emotion?'selected':''}>${esc(e)}</option>`).join('')}
+      </select>
+
+      ${range('emotionIntensity',t('emotionIntensity'),x.emotionIntensity)}
+
+      ${range('mental',t('mental'),x.mental)}
+
+      ${range('practical',t('practical'),x.practical)}
+
+      <label>${t('frequency')}</label>
+
+      <select id="frequency">
+
+        ${
+          ['freq0','freq1','freq2','freq3','freq4','freq5']
+          .map(k=>`<option value="${k}" ${k===x.frequency?'selected':''}>${t(k)}</option>`)
+          .join('')
+        }
+
+      </select>
+
+      <label>${t('actions')}</label>
+
+      <textarea id="actions">${esc(x.actions)}</textarea>
+
+      <label>${t('hours')}</label>
+
+      <input
+        type="number"
+        min="0"
+        max="168"
+        step="0.25"
+        id="hours"
+        value="${x.hours}"
+      >
+
+      <div class="grid" style="margin-top:18px">
+
+        <button class="btn secondary" id="wizBack">${t('back')}</button>
+
+        <button class="btn primary" id="wizNext">${t('next')}</button>
+
+      </div>
+
+    </div>`;
+  }
+
+  function renderOOP(){
+
+    const x=wizard.oop;
+
+    const evid=[
+      ['direct','evidenceDirect'],
+      ['documented','evidenceDocumented'],
+      ['otherPerson','evidenceOtherPerson'],
+      ['subjective','evidenceSubjective'],
+      ['insufficient','evidenceInsufficient'],
+      ['other','evidenceOther']
+    ];
+
+    return `<div class="card flat">
+
+      <label>${t('currentState')}</label>
+
+      <textarea id="currentState">${esc(x.currentState)}</textarea>
+
+      ${range('achievement',t('achievement'),x.achievement)}
+
+      <label>${t('events')}</label>
+
+      <textarea id="events">${esc(x.events)}</textarea>
+
+      <label>${t('direction')}</label>
+
+      <select id="direction">
+
+        <option value="toward" ${x.direction==='toward'?'selected':''}>
+          ${t('directionToward')}
+        </option>
+
+        <option value="none" ${x.direction==='none'?'selected':''}>
+          ${t('directionNone')}
+        </option>
+
+        <option value="away" ${x.direction==='away'?'selected':''}>
+          ${t('directionAway')}
+        </option>
+
+        <option value="mixed" ${x.direction==='mixed'?'selected':''}>
+          ${t('directionMixed')}
+        </option>
+
+        <option value="unknown" ${x.direction==='unknown'?'selected':''}>
+          ${t('directionUnknown')}
+        </option>
+
+      </select>
+
+      <label>${t('evidence')}</label>
+
+      ${
+        evid.map(([v,k])=>`
+          <div class="choice">
+
+            <input
+              type="checkbox"
+              data-evidence="${v}"
+              ${x.evidence.includes(v)?'checked':''}
+            >
+
+            <span>${t(k)}</span>
+
+          </div>
+        `).join('')
+      }
+
+      <label>${t('external')}</label>
+
+      <textarea id="external">${esc(x.external)}</textarea>
+
+      <div class="grid" style="margin-top:18px">
+
+        <button class="btn secondary" id="wizBack">${t('back')}</button>
+
+        <button class="btn primary" id="wizNext">${t('next')}</button>
+
+      </div>
+
+    </div>`;
+  }
+
+  function renderRevision(){
+
+    const dims=[
+      ['primary','primary'],
+      ['success','success'],
+      ['scope','scope'],
+      ['nonGoals','nonGoals'],
+      ['constraints','constraints'],
+      ['rationale','rationale']
+    ];
+
+    return `<div class="card flat">
+
+      <label>${t('intentional')}</label>
+
+      ${
+        [['yes','yes'],['no','no'],['unsure','unsure']]
+        .map(([v,k])=>`
+          <div class="choice">
+
+            <input
+              type="radio"
+              name="intentional"
+              value="${v}"
+              ${wizard.intentional===v?'checked':''}
+            >
+
+            <span>${t(k)}</span>
+
+          </div>
+        `).join('')
+      }
+
+      <div
+        id="revisionBox"
+        class="${wizard.intentional==='yes'?'':'hidden'}"
+      >
+
+        <div class="divider"></div>
+
+        <label>${t('changedParts')}</label>
+
+        <div class="help">${t('revisionHelp')}</div>
+
+        ${
+          dims.map(([v,k])=>`
+            <div class="choice">
+
+              <input
+                type="checkbox"
+                data-dim="${v}"
+                ${wizard.selected.includes(v)?'checked':''}
+              >
+
+              <span>${t(k)}</span>
+
+            </div>
+          `).join('')
+        }
+
+        <div id="revisionFields">
+          ${renderRevisionFields()}
+        </div>
+
+      </div>
+
+      <div class="grid" style="margin-top:18px">
+
+        <button class="btn secondary" id="wizBack">${t('back')}</button>
+
+        <button class="btn primary" id="wizComplete">${t('complete')}</button>
+
+      </div>
+
+      <div id="wizMsg" class="help"></div>
+
+    </div>`;
+  }
+
+  function renderRevisionFields(){
+
+    if(wizard.intentional!=='yes')
+      return '';
+
+    return wizard.selected
+      .map(k=>`
+        <label>${t(k)}</label>
+        <textarea data-revision="${k}">${esc(
+          wizard.revision[k] ??
+          wizard.cie[k] ??
+          ''
+        )}</textarea>
+      `)
+      .join('');
+  }
 
   function renderHistory(){
-    if(!state.intent) return `<div class="card empty"><h2>${t('noGoal')}</h2></div>`;
-    const c=state.intent.cycles||[];
-    return `<h1>${t('history')}</h1><div class="card flat"><h2>${esc(state.intent.ris.primary)}</h2><p class="muted">${c.length} ${t('cycles')}</p></div>${c.length?`<div class="timeline">${[...c].reverse().map((x,i)=>`<div class="event"><h3>${dateLabel(x.createdAt)}</h3><span class="pill">${t('achieved')}: ${x.oop.achievement}/10</span><span class="pill">${t('desireShort')}: ${x.iep.desire}/10</span><span class="pill">${t('mentalShort')}: ${x.iep.mental}/10</span><span class="pill">${t('practicalShort')}: ${x.iep.practical}/10</span><p>${esc(x.oop.events || x.oop.currentState)}</p><div class="help">${x.intentional==='yes'?t('yes'):x.intentional==='no'?t('no'):t('unsure')} · ${esc(directionLabel(x.oop.direction))}</div></div>`).join('')}</div>`:`<div class="card empty">${t('noHistory')}</div>`}`;
-  }
-  function directionLabel(v){ return t({toward:'directionToward',none:'directionNone',away:'directionAway',mixed:'directionMixed',unknown:'directionUnknown'}[v]||'directionUnknown'); }
 
-  function renderData(){ return `<h1>${t('data')}</h1><div class="card"><h2>${t('privacyTitle')}</h2><p>${t('privacyText')}</p><p class="help">${t('testNote')}</p></div><div class="stack"><button class="btn secondary" id="exportBtn">${t('export')}</button><button class="btn secondary" id="importBtn">${t('import')}</button><input id="importFile" type="file" accept="application/json,.json" class="hidden"><button class="btn danger" id="deleteBtn">${t('delete')}</button></div><div class="notice smalltext" style="margin-top:16px">${t('disclaimer')}</div>`; }
+    if(!state.intent)
+      return `<div class="card empty">
+        <h2>${t('noGoal')}</h2>
+      </div>`;
+
+    const c=state.intent.cycles || [];
+
+    return `<h1>${t('history')}</h1>
+
+    <div class="card flat">
+
+      <h2>${esc(state.intent.ris.primary)}</h2>
+
+      <p class="muted">
+        ${c.length} ${cycleLabel(c.length)}
+      </p>
+
+    </div>
+
+    ${
+      c.length
+      ?
+      `<div class="timeline">
+
+        ${
+          [...c]
+          .reverse()
+          .map((x,i)=>`
+
+            <div class="event">
+
+              <h3>${dateLabel(x.createdAt)}</h3>
+
+              <span class="pill">
+                ${t('achieved')}: ${x.oop.achievement}/10
+              </span>
+
+              <span class="pill">
+                ${t('desireShort')}: ${x.iep.desire}/10
+              </span>
+
+              <span class="pill">
+                ${t('mentalShort')}: ${x.iep.mental}/10
+              </span>
+
+              <span class="pill">
+                ${t('practicalShort')}: ${x.iep.practical}/10
+              </span>
+
+              <p>
+                ${esc(x.oop.events || x.oop.currentState)}
+              </p>
+
+              <div class="help">
+
+                ${
+                  x.intentional==='yes'
+                  ? t('yes')
+                  : x.intentional==='no'
+                  ? t('no')
+                  : t('unsure')
+                }
+
+                ·
+
+                ${esc(directionLabel(x.oop.direction))}
+
+              </div>
+
+            </div>
+
+          `)
+          .join('')
+        }
+
+      </div>`
+      :
+      `<div class="card empty">
+        ${t('noHistory')}
+      </div>`
+    }`;
+  }
+
+  function directionLabel(v){
+
+    return t(
+      {
+        toward:'directionToward',
+        none:'directionNone',
+        away:'directionAway',
+        mixed:'directionMixed',
+        unknown:'directionUnknown'
+      }[v] || 'directionUnknown'
+    );
+  }
+
+  function renderData(){
+
+    return `<h1>${t('data')}</h1>
+
+    <div class="card">
+
+      <h2>${t('privacyTitle')}</h2>
+
+      <p>${t('privacyText')}</p>
+
+      <p class="help">
+        ${t('testNote')}
+      </p>
+
+    </div>
+
+    <div class="stack">
+
+      <button class="btn secondary" id="exportBtn">
+        ${t('export')}
+      </button>
+
+      <button class="btn secondary" id="importBtn">
+        ${t('import')}
+      </button>
+
+      <input
+        id="importFile"
+        type="file"
+        accept="application/json,.json"
+        class="hidden"
+      >
+
+      <button class="btn danger" id="deleteBtn">
+        ${t('delete')}
+      </button>
+
+    </div>
+
+    <div
+      class="notice smalltext"
+      style="margin-top:16px"
+    >
+      ${t('disclaimer')}
+    </div>`;
+  }
 
   function bindCommon(){
-    $('#langBtn')?.addEventListener('click',()=>{ state.lang=state.lang==='ru'?'en':'ru'; persist(); render(); });
-    $$('[data-nav]').forEach(b=>b.addEventListener('click',()=>{ view=b.dataset.nav; wizard=null; render(); }));
-    $('#createGoal')?.addEventListener('click',()=>{ view='ris'; render(); });
-    $('#editGoal')?.addEventListener('click',()=>{ view='ris'; render(); });
-    $('#startCheckin')?.addEventListener('click',startWizard);
-  }
-  function bindRIS(){
-    $('#risCancel').addEventListener('click',()=>{view='home';render();});
-    $('#risSave').addEventListener('click',()=>{
-      const r={}; ['primary','success','scope','nonGoals','constraints','rationale'].forEach(k=>r[k]=$('#'+k).value.trim());
-      if(Object.values(r).some(v=>!v)){ $('#risMsg').textContent=t('required'); $('#risMsg').className='badge-danger'; return; }
-      const existed=!!state.intent;
-      if(!state.intent) state.intent={id:uid(),createdAt:now(),ris:r,cycles:[]}; else state.intent.ris=r;
-      persist(); $('#risMsg').textContent=existed?t('updated'):t('created'); $('#risMsg').className='badge-ok'; setTimeout(()=>{view='home';render();},450);
-    });
-  }
-  function syncRanges(){ ['desire','belief','emotionIntensity','mental','practical','achievement'].forEach(id=>{ const el=$('#'+id); if(el) el.oninput=()=>$('#'+id+'Val').textContent=el.value; }); }
-  function saveStep(){
-    if(wizard.step===1){ ['primary','success','scope','nonGoals','constraints','rationale'].forEach(k=>wizard.cie[k]=$('#'+k).value.trim()); return !Object.values(wizard.cie).some(v=>!v); }
-    if(wizard.step===2){ ['desire','belief','emotionIntensity','mental','practical'].forEach(k=>wizard.iep[k]=Number($('#'+k).value)); wizard.iep.emotion=$('#emotion').value; wizard.iep.frequency=$('#frequency').value; wizard.iep.actions=$('#actions').value.trim(); wizard.iep.hours=Number($('#hours').value||0); return true; }
-    if(wizard.step===3){ wizard.oop.currentState=$('#currentState').value.trim(); wizard.oop.achievement=Number($('#achievement').value); wizard.oop.events=$('#events').value.trim(); wizard.oop.direction=$('#direction').value; wizard.oop.evidence=$$('[data-evidence]:checked').map(x=>x.dataset.evidence); wizard.oop.external=$('#external').value.trim(); return true; }
-    if(wizard.step===4){ const radio=$('input[name=intentional]:checked'); wizard.intentional=radio?radio.value:'no'; wizard.selected=$$('[data-dim]:checked').map(x=>x.dataset.dim); $$('[data-revision]').forEach(x=>wizard.revision[x.dataset.revision]=x.value.trim()); return true; }
-  }
-  function bindWizard(){
-    syncRanges();
-    $('#wizCancel')?.addEventListener('click',()=>{ if(confirm(state.lang==='ru'?'Отменить текущий check-in?':'Cancel this check-in?')){ wizard=null; view='home'; render(); }});
-    $('#wizNext')?.addEventListener('click',()=>{ if(!saveStep()){alert(t('required'));return;} wizard.step++; render(); });
-    $('#wizBack')?.addEventListener('click',()=>{ saveStep(); wizard.step--; render(); });
-    $$('input[name=intentional]').forEach(r=>r.addEventListener('change',()=>{ wizard.intentional=r.value; render(); }));
-    $$('[data-dim]').forEach(c=>c.addEventListener('change',()=>{ saveStep(); wizard.selected=$$('[data-dim]:checked').map(x=>x.dataset.dim); render(); }));
-    $('#wizComplete')?.addEventListener('click',()=>{
-      saveStep();
-      if(wizard.intentional==='yes' && wizard.selected.length===0){ $('#wizMsg').textContent=state.lang==='ru'?'Выбери хотя бы одну часть RIS для изменения.':'Select at least one RIS dimension to revise.'; $('#wizMsg').className='badge-danger'; return; }
-      const cycle={id:uid(),createdAt:now(),cie:wizard.cie,iep:wizard.iep,oop:wizard.oop,intentional:wizard.intentional,revision:{}};
-      if(wizard.intentional==='yes') wizard.selected.forEach(k=>{ const v=(wizard.revision[k]||wizard.cie[k]||'').trim(); cycle.revision[k]=v; state.intent.ris[k]=v; });
-      state.intent.cycles.push(cycle); persist(); wizard=null; view='home'; render(); setTimeout(()=>alert(t('saved')),50);
-    });
-  }
-  function bindData(){
-    $('#exportBtn').addEventListener('click',()=>{ const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`PHEISIRAETHA-backup-${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(a.href); });
-    $('#importBtn').addEventListener('click',()=>$('#importFile').click());
-    $('#importFile').addEventListener('change', async e=>{ try{ const x=JSON.parse(await e.target.files[0].text()); if(!x.version || !('intent' in x)) throw new Error(); state=x; persist(); alert(t('imported')); render(); }catch{ alert(t('importError')); } });
-    $('#deleteBtn').addEventListener('click',()=>{ if(confirm(t('deleteConfirm'))){ localStorage.removeItem(STORAGE_KEY); state=fresh(); view='home'; render(); } });
+
+    $('#langBtn')?.addEventListener(
+      'click',
+      ()=>{
+        state.lang =
+          state.lang==='ru'
+          ? 'en'
+          : 'ru';
+
+        persist();
+        render();
+      }
+    );
+
+    $$('[data-nav]').forEach(
+      b=>b.addEventListener(
+        'click',
+        ()=>{
+          view=b.dataset.nav;
+          wizard=null;
+          render();
+        }
+      )
+    );
+
+    $('#createGoal')?.addEventListener(
+      'click',
+      ()=>{
+        view='ris';
+        render();
+      }
+    );
+
+    $('#editGoal')?.addEventListener(
+      'click',
+      ()=>{
+        view='ris';
+        render();
+      }
+    );
+
+    $('#startCheckin')?.addEventListener(
+      'click',
+      startWizard
+    );
   }
 
-  if('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(()=>{});
+  function bindRIS(){
+
+    $('#risCancel').addEventListener(
+      'click',
+      ()=>{
+        view='home';
+        render();
+      }
+    );
+
+    $('#risSave').addEventListener(
+      'click',
+      ()=>{
+
+        const r={};
+
+        [
+          'primary',
+          'success',
+          'scope',
+          'nonGoals',
+          'constraints',
+          'rationale'
+        ]
+        .forEach(
+          k=>r[k]=$('#'+k).value.trim()
+        );
+
+        if(
+          Object.values(r)
+          .some(v=>!v)
+        ){
+
+          $('#risMsg').textContent=t('required');
+
+          $('#risMsg').className='badge-danger';
+
+          return;
+        }
+
+        const existed=!!state.intent;
+
+        if(!state.intent){
+
+          state.intent={
+            id:uid(),
+            createdAt:now(),
+            ris:r,
+            cycles:[]
+          };
+
+        } else {
+
+          state.intent.ris=r;
+        }
+
+        persist();
+
+        $('#risMsg').textContent=
+          existed
+          ? t('updated')
+          : t('created');
+
+        $('#risMsg').className='badge-ok';
+
+        setTimeout(
+          ()=>{
+            view='home';
+            render();
+          },
+          450
+        );
+      }
+    );
+  }
+
+  function syncRanges(){
+
+    [
+      'desire',
+      'belief',
+      'emotionIntensity',
+      'mental',
+      'practical',
+      'achievement'
+    ]
+    .forEach(
+      id=>{
+
+        const el=$('#'+id);
+
+        if(el)
+          el.oninput=
+            ()=>$('#'+id+'Val').textContent=el.value;
+      }
+    );
+  }
+
+  function saveStep(){
+
+    if(wizard.step===1){
+
+      [
+        'primary',
+        'success',
+        'scope',
+        'nonGoals',
+        'constraints',
+        'rationale'
+      ]
+      .forEach(
+        k=>wizard.cie[k]=$('#'+k).value.trim()
+      );
+
+      return !Object.values(wizard.cie).some(v=>!v);
+    }
+
+    if(wizard.step===2){
+
+      [
+        'desire',
+        'belief',
+        'emotionIntensity',
+        'mental',
+        'practical'
+      ]
+      .forEach(
+        k=>wizard.iep[k]=Number($('#'+k).value)
+      );
+
+      wizard.iep.emotion=$('#emotion').value;
+      wizard.iep.frequency=$('#frequency').value;
+      wizard.iep.actions=$('#actions').value.trim();
+      wizard.iep.hours=Number($('#hours').value||0);
+
+      return true;
+    }
+
+    if(wizard.step===3){
+
+      wizard.oop.currentState=$('#currentState').value.trim();
+
+      wizard.oop.achievement=
+        Number($('#achievement').value);
+
+      wizard.oop.events=
+        $('#events').value.trim();
+
+      wizard.oop.direction=
+        $('#direction').value;
+
+      wizard.oop.evidence=
+        $$('[data-evidence]:checked')
+        .map(x=>x.dataset.evidence);
+
+      wizard.oop.external=
+        $('#external').value.trim();
+
+      return true;
+    }
+
+    if(wizard.step===4){
+
+      const radio=
+        $('input[name=intentional]:checked');
+
+      wizard.intentional=
+        radio
+        ? radio.value
+        : 'no';
+
+      wizard.selected=
+        $$('[data-dim]:checked')
+        .map(x=>x.dataset.dim);
+
+      $$('[data-revision]')
+      .forEach(
+        x=>
+          wizard.revision[x.dataset.revision]
+          =
+          x.value.trim()
+      );
+
+      return true;
+    }
+  }
+
+  function bindWizard(){
+
+    syncRanges();
+
+    $('#wizCancel')?.addEventListener(
+      'click',
+      ()=>{
+
+        if(
+          confirm(
+            state.lang==='ru'
+            ? 'Отменить текущий check-in?'
+            : 'Cancel this check-in?'
+          )
+        ){
+
+          wizard=null;
+          view='home';
+          render();
+        }
+      }
+    );
+
+    $('#wizNext')?.addEventListener(
+      'click',
+      ()=>{
+
+        if(!saveStep()){
+
+          alert(t('required'));
+
+          return;
+        }
+
+        wizard.step++;
+
+        render();
+      }
+    );
+
+    $('#wizBack')?.addEventListener(
+      'click',
+      ()=>{
+
+        saveStep();
+
+        wizard.step--;
+
+        render();
+      }
+    );
+
+    $$('input[name=intentional]')
+    .forEach(
+      r=>r.addEventListener(
+        'change',
+        ()=>{
+
+          wizard.intentional=r.value;
+
+          render();
+        }
+      )
+    );
+
+    $$('[data-dim]')
+    .forEach(
+      c=>c.addEventListener(
+        'change',
+        ()=>{
+
+          saveStep();
+
+          wizard.selected=
+            $$('[data-dim]:checked')
+            .map(x=>x.dataset.dim);
+
+          render();
+        }
+      )
+    );
+
+    $('#wizComplete')?.addEventListener(
+      'click',
+      ()=>{
+
+        saveStep();
+
+        if(
+          wizard.intentional==='yes' &&
+          wizard.selected.length===0
+        ){
+
+          $('#wizMsg').textContent=
+            state.lang==='ru'
+            ? 'Выбери хотя бы одну часть RIS для изменения.'
+            : 'Select at least one RIS dimension to revise.';
+
+          $('#wizMsg').className='badge-danger';
+
+          return;
+        }
+
+        const cycle={
+          id:uid(),
+          createdAt:now(),
+          cie:wizard.cie,
+          iep:wizard.iep,
+          oop:wizard.oop,
+          intentional:wizard.intentional,
+          revision:{}
+        };
+
+        if(wizard.intentional==='yes'){
+
+          wizard.selected.forEach(
+            k=>{
+
+              const v=
+                (
+                  wizard.revision[k] ||
+                  wizard.cie[k] ||
+                  ''
+                )
+                .trim();
+
+              cycle.revision[k]=v;
+
+              state.intent.ris[k]=v;
+            }
+          );
+        }
+
+        state.intent.cycles.push(cycle);
+
+        persist();
+
+        wizard=null;
+
+        view='home';
+
+        render();
+
+        setTimeout(
+          ()=>alert(t('saved')),
+          50
+        );
+      }
+    );
+  }
+
+  function bindData(){
+
+    $('#exportBtn').addEventListener(
+      'click',
+      ()=>{
+
+        const blob=
+          new Blob(
+            [JSON.stringify(state,null,2)],
+            {type:'application/json'}
+          );
+
+        const a=
+          document.createElement('a');
+
+        a.href=
+          URL.createObjectURL(blob);
+
+        a.download=
+          `PHEISIRAETHA-backup-${new Date().toISOString().slice(0,10)}.json`;
+
+        a.click();
+
+        URL.revokeObjectURL(a.href);
+      }
+    );
+
+    $('#importBtn').addEventListener(
+      'click',
+      ()=>$('#importFile').click()
+    );
+
+    $('#importFile').addEventListener(
+      'change',
+      async e=>{
+
+        try{
+
+          const x=
+            JSON.parse(
+              await e.target.files[0].text()
+            );
+
+          if(
+            !x.version ||
+            !('intent' in x)
+          )
+            throw new Error();
+
+          state=x;
+
+          persist();
+
+          alert(t('imported'));
+
+          render();
+
+        }catch{
+
+          alert(t('importError'));
+        }
+      }
+    );
+
+    $('#deleteBtn').addEventListener(
+      'click',
+      ()=>{
+
+        if(
+          confirm(t('deleteConfirm'))
+        ){
+
+          localStorage.removeItem(STORAGE_KEY);
+
+          state=fresh();
+
+          view='home';
+
+          render();
+        }
+      }
+    );
+  }
+
+  if(
+    'serviceWorker' in navigator &&
+    location.protocol.startsWith('http')
+  ){
+    navigator.serviceWorker
+      .register('sw.js')
+      .catch(()=>{});
+  }
+
   render();
+
 })();
