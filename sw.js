@@ -1,4 +1,4 @@
-const CACHE='pheisiraetha-v02';
+const CACHE='pheisiraetha-v04';
 
 const ASSETS=[
   './',
