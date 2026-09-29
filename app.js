@@ -1,5 +1,6 @@
 (() => {
   const STORAGE_KEY = 'pheisiraetha_v01';
+  const ONBOARDING_KEY = 'pheisiraetha_onboarding_v01';
   const APP_VERSION = '0.1.0';
   const $ = (sel, root=document) => root.querySelector(sel);
   const $$ = (sel, root=document) => [...root.querySelectorAll(sel)];
@@ -94,6 +95,84 @@
       freq0:'Вообще нет', freq1:'Реже одного раза в день', freq2:'Примерно раз в день', freq3:'Несколько раз в день', freq4:'Много раз в день', freq5:'Почти постоянно',
       emotions:['Любовь / привязанность','Радость / воодушевление','Надежда / позитивное ожидание','Спокойствие / удовлетворённость','Страх / тревога','Гнев / фрустрация','Грусть / разочарование','Стыд / вина','Нейтрально / почти без эмоций','Другое'],
       testNote:'Прототип v0.1 — для самостоятельного тестирования перед публичной beta.'
+    }
+  };
+
+  const ONBOARDING = {
+    en: {
+      continue:'Continue',
+      skip:'Skip',
+      start:'Start',
+      progress:step=>`Step ${step} of 4`,
+      screens:[
+        {
+          title:'PHEISIRAETHA',
+          lead:'From intention to observable outcome.',
+          paragraphs:[
+            'PHEISIRAETHA helps you define what you want to achieve and then observe how your actions, state, and real-world outcomes change over time.'
+          ]
+        },
+        {
+          title:'1. Define your intention',
+          paragraphs:[
+            'Create a RIS — your ratified intention state: objective, success criteria, scope, non-goals, constraints and rationale.',
+            'This becomes your reference point.'
+          ]
+        },
+        {
+          title:'2. Check in over time',
+          paragraphs:[
+            'During a check-in you independently describe the current state of your intention, your emotions and effort, and then record the observable outcome.',
+            'Over time this creates a history of change.'
+          ]
+        },
+        {
+          title:"3. Observe, don't assume",
+          paragraphs:[
+            'PHEISIRAETHA does not claim that thoughts, emotions or intentions cause external events.',
+            'The app helps separate intention, actions and observable outcomes and track how they change over time.',
+            'All data in this version is stored locally on this device.'
+          ]
+        }
+      ]
+    },
+
+    ru: {
+      continue:'Далее',
+      skip:'Пропустить',
+      start:'Начать',
+      progress:step=>`Шаг ${step} из 4`,
+      screens:[
+        {
+          title:'PHEISIRAETHA',
+          lead:'От намерения к наблюдаемому результату.',
+          paragraphs:[
+            'PHEISIRAETHA помогает зафиксировать то, чего ты хочешь достичь, а затем наблюдать, как со временем меняются твои действия, состояние и реальные результаты.'
+          ]
+        },
+        {
+          title:'1. Зафиксируй намерение',
+          paragraphs:[
+            'Создай RIS — исходное состояние намерения: цель, критерии успеха, область, не-цели, ограничения и обоснование.',
+            'Это становится точкой отсчёта.'
+          ]
+        },
+        {
+          title:'2. Делай check-in',
+          paragraphs:[
+            'Во время check-in ты независимо описываешь текущее состояние намерения, свои эмоции и усилия, а затем фиксируешь наблюдаемый результат.',
+            'Так со временем формируется история изменений.'
+          ]
+        },
+        {
+          title:'3. Наблюдай, не предполагай',
+          paragraphs:[
+            'PHEISIRAETHA не утверждает, что мысли, эмоции или намерения вызывают внешние события.',
+            'Приложение помогает отделять намерение, действия и наблюдаемые результаты и смотреть, как они изменяются со временем.',
+            'Все данные этой версии хранятся только локально на этом устройстве.'
+          ]
+        }
+      ]
     }
   };
 
@@ -192,6 +271,12 @@
   let view = 'home';
   let wizard = null;
   let risDraft = null;
+  let onboardingStep = hasCompletedOnboarding() ? null : 1;
+
+  if(onboardingStep && state.intent){
+    setOnboardingComplete();
+    onboardingStep=null;
+  }
 
   function load(){
     try {
@@ -204,6 +289,14 @@
 
   function persist(){
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  function hasCompletedOnboarding(){
+    return localStorage.getItem(ONBOARDING_KEY)==='1';
+  }
+
+  function setOnboardingComplete(){
+    localStorage.setItem(ONBOARDING_KEY,'1');
   }
 
   function t(k){
@@ -250,6 +343,13 @@
     const app = document.getElementById('app');
 
     document.documentElement.lang=state.lang;
+    document.body.classList.toggle('is-onboarding',onboardingStep!==null);
+
+    if(onboardingStep!==null){
+      app.innerHTML=renderOnboarding();
+      bindOnboarding();
+      return;
+    }
 
     if(view==='ris') app.innerHTML = shell(renderRIS());
     else if(view==='wizard') app.innerHTML = shell(renderWizard());
@@ -262,6 +362,76 @@
     if(view==='ris') bindRIS();
     if(view==='wizard') bindWizard();
     if(view==='data') bindData();
+  }
+
+  function renderOnboarding(){
+    const copy=ONBOARDING[state.lang] || ONBOARDING.en;
+    const screen=copy.screens[onboardingStep-1];
+    const progressLabel=copy.progress(onboardingStep);
+    const dots=copy.screens.map((_,index)=>{
+      const step=index+1;
+      const classes=[
+        'onboarding-dot',
+        step<onboardingStep ? 'complete' : '',
+        step===onboardingStep ? 'active' : ''
+      ].filter(Boolean).join(' ');
+
+      return `<span class="${classes}"${step===onboardingStep ? ' aria-current="step"' : ''}></span>`;
+    }).join('');
+
+    return `<div class="onboarding-shell">
+      <header class="onboarding-topbar">
+        <div class="brand">PHEISIRAETHA</div>
+        <button class="lang" id="onboardingLangBtn" type="button">${state.lang==='ru'?'RU':'EN'}</button>
+      </header>
+
+      <main class="onboarding-main">
+        <section class="onboarding-panel" aria-labelledby="onboardingTitle">
+          <div class="onboarding-progress-row">
+            <span class="onboarding-count">${onboardingStep} / 4</span>
+            <div class="onboarding-dots" role="img" aria-label="${esc(progressLabel)}">${dots}</div>
+          </div>
+
+          <div class="onboarding-content">
+            <h1 id="onboardingTitle">${esc(screen.title)}</h1>
+            ${screen.lead ? `<p class="onboarding-lead">${esc(screen.lead)}</p>` : ''}
+            ${screen.paragraphs.map(text=>`<p>${esc(text)}</p>`).join('')}
+          </div>
+
+          <div class="onboarding-actions${onboardingStep===4?' single':''}">
+            ${onboardingStep<4 ? `<button class="btn secondary" id="onboardingSkip" type="button">${copy.skip}</button>` : ''}
+            <button class="btn primary" id="${onboardingStep<4?'onboardingNext':'onboardingStart'}" type="button">
+              ${onboardingStep<4 ? copy.continue : copy.start}
+            </button>
+          </div>
+        </section>
+      </main>
+    </div>`;
+  }
+
+  function bindOnboarding(){
+    $('#onboardingLangBtn')?.addEventListener('click',()=>{
+      state.lang=state.lang==='ru' ? 'en' : 'ru';
+      persist();
+      render();
+    });
+
+    $('#onboardingNext')?.addEventListener('click',()=>{
+      onboardingStep=Math.min(4,onboardingStep+1);
+      render();
+    });
+
+    $('#onboardingSkip')?.addEventListener('click',completeOnboarding);
+    $('#onboardingStart')?.addEventListener('click',completeOnboarding);
+  }
+
+  function completeOnboarding(){
+    setOnboardingComplete();
+    onboardingStep=null;
+    view='home';
+    wizard=null;
+    risDraft=null;
+    render();
   }
 
   function renderHome(){
