@@ -99,9 +99,99 @@
 
   const fresh = () => ({ version: APP_VERSION, lang:'ru', intent:null });
 
+  const RIS_FIELDS = [
+    'primary',
+    'success',
+    'scope',
+    'nonGoals',
+    'constraints',
+    'rationale'
+  ];
+
+  const risValues = (source={}) =>
+    Object.fromEntries(
+      RIS_FIELDS.map(k=>[k,String(source?.[k] ?? '')])
+    );
+
+  const isRecord = value =>
+    value!==null && typeof value==='object' && !Array.isArray(value);
+
+  const hasTextFields = (value,fields) =>
+    isRecord(value) && fields.every(k=>typeof value[k]==='string');
+
+  const isNumberIn = (value,min,max) =>
+    Number.isFinite(value) && value>=min && value<=max;
+
+  function isValidCycle(cycle){
+    if(
+      !isRecord(cycle) ||
+      typeof cycle.id!=='string' ||
+      typeof cycle.createdAt!=='string' ||
+      Number.isNaN(Date.parse(cycle.createdAt)) ||
+      !hasTextFields(cycle.cie,RIS_FIELDS) ||
+      !isRecord(cycle.iep) ||
+      !isRecord(cycle.oop) ||
+      !['yes','no','unsure'].includes(cycle.intentional) ||
+      !isRecord(cycle.revision)
+    ) return false;
+
+    const iep=cycle.iep;
+    if(
+      !['desire','belief','emotionIntensity','mental','practical']
+        .every(k=>isNumberIn(iep[k],0,10)) ||
+      typeof iep.emotion!=='string' ||
+      !['freq0','freq1','freq2','freq3','freq4','freq5']
+        .includes(iep.frequency) ||
+      typeof iep.actions!=='string' ||
+      !isNumberIn(iep.hours,0,168)
+    ) return false;
+
+    const oop=cycle.oop;
+    if(
+      typeof oop.currentState!=='string' ||
+      !isNumberIn(oop.achievement,0,10) ||
+      typeof oop.events!=='string' ||
+      !['toward','none','away','mixed','unknown']
+        .includes(oop.direction) ||
+      !Array.isArray(oop.evidence) ||
+      !oop.evidence.every(v=>
+        ['direct','documented','otherPerson','subjective','insufficient','other']
+          .includes(v)
+      ) ||
+      typeof oop.external!=='string'
+    ) return false;
+
+    return Object.entries(cycle.revision)
+      .every(([k,v])=>RIS_FIELDS.includes(k) && typeof v==='string');
+  }
+
+  function isValidBackup(value){
+    if(
+      !isRecord(value) ||
+      value.version!==APP_VERSION ||
+      !['ru','en'].includes(value.lang) ||
+      !Object.hasOwn(value,'intent')
+    ) return false;
+
+    if(value.intent===null)
+      return true;
+
+    const intent=value.intent;
+    return (
+      isRecord(intent) &&
+      typeof intent.id==='string' &&
+      typeof intent.createdAt==='string' &&
+      !Number.isNaN(Date.parse(intent.createdAt)) &&
+      hasTextFields(intent.ris,RIS_FIELDS) &&
+      Array.isArray(intent.cycles) &&
+      intent.cycles.every(isValidCycle)
+    );
+  }
+
   let state = load();
   let view = 'home';
   let wizard = null;
+  let risDraft = null;
 
   function load(){
     try {
@@ -158,6 +248,8 @@
 
   function render(){
     const app = document.getElementById('app');
+
+    document.documentElement.lang=state.lang;
 
     if(view==='ris') app.innerHTML = shell(renderRIS());
     else if(view==='wizard') app.innerHTML = shell(renderWizard());
@@ -246,14 +338,10 @@
 
   function renderRIS(){
 
-    const r = state.intent?.ris || {
-      primary:'',
-      success:'',
-      scope:'',
-      nonGoals:'',
-      constraints:'',
-      rationale:''
-    };
+    if(!risDraft)
+      risDraft=risValues(state.intent?.ris);
+
+    const r=risDraft;
 
     return `<div class="row">
       <h1>${t('ris')}</h1>
@@ -302,6 +390,8 @@
         actions:'',
         hours:0
       },
+
+      emotionIndex:2,
 
       oop:{
         currentState:'',
@@ -403,6 +493,11 @@
 
     const ems=t('emotions');
 
+    const emotionIndex=
+      Number.isInteger(wizard.emotionIndex)
+      ? wizard.emotionIndex
+      : Math.max(0,ems.indexOf(x.emotion));
+
     return `<div class="card flat">
 
       ${range('desire',t('desire'),x.desire)}
@@ -411,7 +506,7 @@
       <label>${t('emotion')}</label>
 
       <select id="emotion">
-        ${ems.map(e=>`<option ${e===x.emotion?'selected':''}>${esc(e)}</option>`).join('')}
+        ${ems.map((e,i)=>`<option ${i===emotionIndex?'selected':''}>${esc(e)}</option>`).join('')}
       </select>
 
       ${range('emotionIntensity',t('emotionIntensity'),x.emotionIntensity)}
@@ -788,10 +883,20 @@
     $('#langBtn')?.addEventListener(
       'click',
       ()=>{
+        if(view==='ris')
+          captureRISDraft();
+
+        if(view==='wizard' && wizard)
+          saveStep({trim:false});
+
         state.lang =
           state.lang==='ru'
           ? 'en'
           : 'ru';
+
+        if(wizard && Number.isInteger(wizard.emotionIndex))
+          wizard.iep.emotion=
+            t('emotions')[wizard.emotionIndex];
 
         persist();
         render();
@@ -804,6 +909,7 @@
         ()=>{
           view=b.dataset.nav;
           wizard=null;
+          risDraft=null;
           render();
         }
       )
@@ -812,6 +918,7 @@
     $('#createGoal')?.addEventListener(
       'click',
       ()=>{
+        risDraft=risValues();
         view='ris';
         render();
       }
@@ -820,6 +927,7 @@
     $('#editGoal')?.addEventListener(
       'click',
       ()=>{
+        risDraft=risValues(state.intent?.ris);
         view='ris';
         render();
       }
@@ -836,6 +944,7 @@
     $('#risCancel').addEventListener(
       'click',
       ()=>{
+        risDraft=null;
         view='home';
         render();
       }
@@ -844,19 +953,10 @@
     $('#risSave').addEventListener(
       'click',
       ()=>{
+        captureRISDraft();
 
-        const r={};
-
-        [
-          'primary',
-          'success',
-          'scope',
-          'nonGoals',
-          'constraints',
-          'rationale'
-        ]
-        .forEach(
-          k=>r[k]=$('#'+k).value.trim()
+        const r=Object.fromEntries(
+          RIS_FIELDS.map(k=>[k,risDraft[k].trim()])
         );
 
         if(
@@ -888,6 +988,8 @@
         }
 
         persist();
+
+        risDraft=null;
 
         $('#risMsg').textContent=
           existed
@@ -929,20 +1031,29 @@
     );
   }
 
-  function saveStep(){
+  function captureRISDraft(){
+    if(view!=='ris')
+      return;
+
+    risDraft=Object.fromEntries(
+      RIS_FIELDS.map(
+        k=>[k,$('#'+k)?.value ?? risDraft?.[k] ?? '']
+      )
+    );
+  }
+
+  function saveStep({trim=true}={}){
+
+    const textValue=id=>{
+      const value=$('#'+id).value;
+      return trim ? value.trim() : value;
+    };
 
     if(wizard.step===1){
 
-      [
-        'primary',
-        'success',
-        'scope',
-        'nonGoals',
-        'constraints',
-        'rationale'
-      ]
+      RIS_FIELDS
       .forEach(
-        k=>wizard.cie[k]=$('#'+k).value.trim()
+        k=>wizard.cie[k]=textValue(k)
       );
 
       return !Object.values(wizard.cie).some(v=>!v);
@@ -961,9 +1072,10 @@
         k=>wizard.iep[k]=Number($('#'+k).value)
       );
 
+      wizard.emotionIndex=$('#emotion').selectedIndex;
       wizard.iep.emotion=$('#emotion').value;
       wizard.iep.frequency=$('#frequency').value;
-      wizard.iep.actions=$('#actions').value.trim();
+      wizard.iep.actions=textValue('actions');
       wizard.iep.hours=Number($('#hours').value||0);
 
       return true;
@@ -971,13 +1083,12 @@
 
     if(wizard.step===3){
 
-      wizard.oop.currentState=$('#currentState').value.trim();
+      wizard.oop.currentState=textValue('currentState');
 
       wizard.oop.achievement=
         Number($('#achievement').value);
 
-      wizard.oop.events=
-        $('#events').value.trim();
+      wizard.oop.events=textValue('events');
 
       wizard.oop.direction=
         $('#direction').value;
@@ -986,8 +1097,7 @@
         $$('[data-evidence]:checked')
         .map(x=>x.dataset.evidence);
 
-      wizard.oop.external=
-        $('#external').value.trim();
+      wizard.oop.external=textValue('external');
 
       return true;
     }
@@ -1011,7 +1121,7 @@
         x=>
           wizard.revision[x.dataset.revision]
           =
-          x.value.trim()
+          trim ? x.value.trim() : x.value
       );
 
       return true;
@@ -1075,7 +1185,7 @@
       r=>r.addEventListener(
         'change',
         ()=>{
-
+          saveStep({trim:false});
           wizard.intentional=r.value;
 
           render();
@@ -1088,8 +1198,7 @@
       c=>c.addEventListener(
         'change',
         ()=>{
-
-          saveStep();
+          saveStep({trim:false});
 
           wizard.selected=
             $$('[data-dim]:checked')
@@ -1212,10 +1321,7 @@
               await e.target.files[0].text()
             );
 
-          if(
-            !x.version ||
-            !('intent' in x)
-          )
+          if(!isValidBackup(x))
             throw new Error();
 
           state=x;
