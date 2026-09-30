@@ -11,7 +11,7 @@
   const T = {
     en: {
       brand:'PHEISIRAETHA', home:'Home', history:'History', data:'Data',
-      local:'Local-first private beta', title:'Turn intention into a traceable cycle.',
+      local:'Local-first beta', productVersion:'PHEISIRAETHA v0.1', title:'Turn intention into a traceable cycle.',
       intro:'Define what you want, record effort and emotion, observe what actually happened, then deliberately keep or revise the intention.',
       noGoal:'No active intention yet.', createGoal:'Create intention', activeGoal:'Active intention',
       checkin:'New check-in', editIntent:'Edit current intention', cycles:'cycles', next:'Continue', back:'Back', save:'Save', cancel:'Cancel',
@@ -40,22 +40,25 @@
       yes:'Yes', no:'No', unsure:'Not sure', changedParts:'Which parts do you intentionally want to revise?',
       revisionHelp:'Only selected dimensions will replace the current RIS. Everything else stays unchanged.',
       complete:'Complete check-in', saved:'Check-in saved.', noHistory:'No check-ins yet.',
-      privacyTitle:'Your data in v0.1', privacyText:'This prototype stores all entries only in this browser on this device. There is no account, server sync, analytics, advertising SDK, or cloud database in v0.1.',
+      aboutTitle:'About PHEISIRAETHA',
+      aboutIntro:'PHEISIRAETHA is a local-first self-reflection tool for tracking an intention over time through repeated check-ins.',
+      aboutPrivacy:'In v0.1, your entries are stored locally in this browser on this device. There is no account, cloud database, advertising SDK or server synchronisation.',
+      aboutDisclaimer:'PHEISIRAETHA does not establish that thoughts, emotions, intentions or effort cause external events. It is not medical or psychological treatment.',
+      feedback:'Report a problem / send feedback',
       export:'Export backup (JSON)', import:'Import backup', delete:'Delete all local data', deleteConfirm:'Delete the entire local PHEISIRAETHA record on this device? This cannot be undone unless you exported a backup.',
       exported:'Backup exported.', imported:'Backup imported.', importError:'This file is not a valid PHEISIRAETHA v0.1 backup.',
       disclaimer:'Self-reflection tool. It does not establish that thoughts, emotions, intentions or effort cause external events. It is not medical or psychological treatment.',
-      recommended:'Recommended rhythm: one check-in per week. v0.1 does not lock the timer so you can test freely.',
+      recommended:'Recommended rhythm: one check-in per week. v0.1 does not lock the timer.',
       summary:'Latest snapshot', achieved:'Achievement', desireShort:'Desire', mentalShort:'Mental effort', practicalShort:'Practical effort',
       directionToward:'Moved toward the desired outcome', directionNone:'No meaningful change', directionAway:'Moved away from the desired outcome', directionMixed:'Mixed or unclear change', directionUnknown:'Not enough information to determine',
       evidenceDirect:'Directly observed events or conditions', evidenceDocumented:'Documented or recorded information', evidenceOtherPerson:'Information provided or confirmed by another person', evidenceSubjective:'My overall subjective impression', evidenceInsufficient:'Not enough information to assess', evidenceOther:'Other',
       freq0:'Not at all', freq1:'Less than once per day', freq2:'About once per day', freq3:'Several times per day', freq4:'Many times per day', freq5:'Almost continuously',
-      emotions:['Love / affection','Joy / excitement','Hope / positive anticipation','Calm / contentment','Fear / anxiety','Anger / frustration','Sadness / disappointment','Shame / guilt','Neutral / little emotion','Other'],
-      testNote:'Prototype v0.1 — designed for self-test before public beta.'
+      emotions:['Love / affection','Joy / excitement','Hope / positive anticipation','Calm / contentment','Fear / anxiety','Anger / frustration','Sadness / disappointment','Shame / guilt','Neutral / little emotion','Other']
     },
 
     ru: {
       brand:'PHEISIRAETHA', home:'Главная', history:'История', data:'Данные',
-      local:'Локальный приватный прототип', title:'Преврати намерение в отслеживаемый цикл.',
+      local:'Локальная beta-версия', productVersion:'PHEISIRAETHA v0.1', title:'Преврати намерение в отслеживаемый цикл.',
       intro:'Определи, чего ты хочешь, зафиксируй усилия и эмоции, наблюдай, что реально произошло, а затем сознательно сохрани или измени намерение.',
       noGoal:'Активного намерения пока нет.', createGoal:'Создать намерение', activeGoal:'Активное намерение',
       checkin:'Новый check-in', editIntent:'Изменить текущее намерение', cycles:'циклов', next:'Далее', back:'Назад', save:'Сохранить', cancel:'Отмена',
@@ -84,17 +87,20 @@
       yes:'Да', no:'Нет', unsure:'Не уверен', changedParts:'Какие части ты сознательно хочешь изменить?',
       revisionHelp:'Только выбранные измерения заменят текущий RIS. Всё остальное останется без изменений.',
       complete:'Завершить check-in', saved:'Check-in сохранён.', noHistory:'Check-in пока нет.',
-      privacyTitle:'Твои данные в v0.1', privacyText:'Этот прототип сохраняет все записи только в браузере на этом устройстве. В v0.1 нет аккаунта, серверной синхронизации, аналитики, рекламных SDK или облачной базы.',
+      aboutTitle:'О PHEISIRAETHA',
+      aboutIntro:'PHEISIRAETHA — это локальный инструмент самонаблюдения, который помогает отслеживать намерение во времени с помощью повторных check-in.',
+      aboutPrivacy:'В версии v0.1 записи хранятся локально в этом браузере на этом устройстве. Нет аккаунта, облачной базы данных, рекламного SDK или серверной синхронизации.',
+      aboutDisclaimer:'PHEISIRAETHA не устанавливает, что мысли, эмоции, намерения или усилия вызывают внешние события. Это не медицинское и не психологическое лечение.',
+      feedback:'Сообщить об ошибке / оставить отзыв',
       export:'Экспорт резервной копии (JSON)', import:'Импорт резервной копии', delete:'Удалить все локальные данные', deleteConfirm:'Удалить всю локальную запись PHEISIRAETHA на этом устройстве? Отменить это будет нельзя, если нет экспортированной копии.',
       exported:'Резервная копия экспортирована.', imported:'Резервная копия импортирована.', importError:'Этот файл не является корректной резервной копией PHEISIRAETHA v0.1.',
       disclaimer:'Инструмент самонаблюдения. Он не устанавливает, что мысли, эмоции, намерения или усилия вызывают внешние события. Это не медицинское и не психологическое лечение.',
-      recommended:'Рекомендуемый ритм: один check-in в неделю. В v0.1 таймер не блокируется, чтобы можно было свободно тестировать.',
+      recommended:'Рекомендуемый ритм: один check-in в неделю. В v0.1 таймер не блокируется.',
       summary:'Последний снимок', achieved:'Достижение', desireShort:'Желание', mentalShort:'Умственные усилия', practicalShort:'Практические усилия',
       directionToward:'Продвижение к желаемому результату', directionNone:'Значимых изменений нет', directionAway:'Удаление от желаемого результата', directionMixed:'Смешанное или неясное изменение', directionUnknown:'Недостаточно информации',
       evidenceDirect:'Непосредственно наблюдаемые события или условия', evidenceDocumented:'Документированная или записанная информация', evidenceOtherPerson:'Информация, предоставленная или подтверждённая другим человеком', evidenceSubjective:'Моё общее субъективное впечатление', evidenceInsufficient:'Недостаточно информации для оценки', evidenceOther:'Другое',
       freq0:'Вообще нет', freq1:'Реже одного раза в день', freq2:'Примерно раз в день', freq3:'Несколько раз в день', freq4:'Много раз в день', freq5:'Почти постоянно',
-      emotions:['Любовь / привязанность','Радость / воодушевление','Надежда / позитивное ожидание','Спокойствие / удовлетворённость','Страх / тревога','Гнев / фрустрация','Грусть / разочарование','Стыд / вина','Нейтрально / почти без эмоций','Другое'],
-      testNote:'Прототип v0.1 — для самостоятельного тестирования перед публичной beta.'
+      emotions:['Любовь / привязанность','Радость / воодушевление','Надежда / позитивное ожидание','Спокойствие / удовлетворённость','Страх / тревога','Гнев / фрустрация','Грусть / разочарование','Стыд / вина','Нейтрально / почти без эмоций','Другое']
     }
   };
 
@@ -1005,15 +1011,20 @@
 
     return `<h1>${t('data')}</h1>
 
-    <div class="card">
+    <div class="card about-card">
 
-      <h2>${t('privacyTitle')}</h2>
+      <div class="product-status">
+        <strong>${t('productVersion')}</strong>
+        <span class="kicker">${t('local')}</span>
+      </div>
 
-      <p>${t('privacyText')}</p>
+      <h2>${t('aboutTitle')}</h2>
 
-      <p class="help">
-        ${t('testNote')}
-      </p>
+      <p>${t('aboutIntro')}</p>
+
+      <p>${t('aboutPrivacy')}</p>
+
+      <p>${t('aboutDisclaimer')}</p>
 
     </div>
 
@@ -1034,17 +1045,19 @@
         class="hidden"
       >
 
+      <a
+        class="btn secondary feedback-link"
+        href="https://github.com/ugreat653-cyber/pheisiraetha-app/issues"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        ${t('feedback')}
+      </a>
+
       <button class="btn danger" id="deleteBtn">
         ${t('delete')}
       </button>
 
-    </div>
-
-    <div
-      class="notice smalltext"
-      style="margin-top:16px"
-    >
-      ${t('disclaimer')}
     </div>`;
   }
 
