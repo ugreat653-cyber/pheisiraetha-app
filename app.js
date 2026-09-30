@@ -1,7 +1,14 @@
 (() => {
   const STORAGE_KEY = 'pheisiraetha_v01';
   const ONBOARDING_KEY = 'pheisiraetha_onboarding_v01';
+  const LANGUAGE_KEY = 'pheisiraetha_language_v01';
   const APP_VERSION = '0.1.0';
+  const SUPPORTED_LANGUAGES = ['ru','en','de'];
+  const LANGUAGE_OPTIONS = [
+    {code:'ru',label:'Русский'},
+    {code:'en',label:'English'},
+    {code:'de',label:'Deutsch'}
+  ];
   const $ = (sel, root=document) => root.querySelector(sel);
   const $$ = (sel, root=document) => [...root.querySelectorAll(sel)];
   const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + '-' + Math.random().toString(16).slice(2));
@@ -10,11 +17,11 @@
 
   const T = {
     en: {
-      brand:'PHEISIRAETHA', home:'Home', history:'History', data:'Data',
+      brand:'PHEISIRAETHA', languageLabel:'Language', home:'Home', history:'History', data:'Data',
       local:'Local-first beta', productVersion:'PHEISIRAETHA v0.1', title:'Turn intention into a traceable cycle.',
       intro:'Define what you want, record effort and emotion, observe what actually happened, then deliberately keep or revise the intention.',
       noGoal:'No active intention yet.', createGoal:'Create intention', activeGoal:'Active intention',
-      checkin:'New check-in', editIntent:'Edit current intention', cycles:'cycles', next:'Continue', back:'Back', save:'Save', cancel:'Cancel',
+      checkin:'New check-in', editIntent:'Edit current intention', cycles:'cycles', cycleOne:'cycle', cycleFew:'cycles', cycleMany:'cycles', next:'Continue', back:'Back', save:'Save', cancel:'Cancel',
       ris:'Ratified Intent State (RIS)', primary:'Primary objective', primaryHelp:'What are you ultimately trying to create, achieve, change or complete?',
       success:'Success criteria', successHelp:'What would need to be true for you to consider this successful?',
       scope:'Scope', scopeHelp:'What is included in this intention or project?',
@@ -40,6 +47,7 @@
       yes:'Yes', no:'No', unsure:'Not sure', changedParts:'Which parts do you intentionally want to revise?',
       revisionHelp:'Only selected dimensions will replace the current RIS. Everything else stays unchanged.',
       complete:'Complete check-in', saved:'Check-in saved.', noHistory:'No check-ins yet.',
+      cancelCheckinConfirm:'Cancel this check-in?', selectRevisionRequired:'Select at least one RIS dimension to revise.',
       aboutTitle:'About PHEISIRAETHA',
       aboutIntro:'PHEISIRAETHA is a local-first self-reflection tool for tracking an intention over time through repeated check-ins.',
       aboutPrivacy:'In v0.1, your entries are stored locally in this browser on this device. There is no account, cloud database, advertising SDK or server synchronisation.',
@@ -57,11 +65,11 @@
     },
 
     ru: {
-      brand:'PHEISIRAETHA', home:'Главная', history:'История', data:'Данные',
+      brand:'PHEISIRAETHA', languageLabel:'Язык', home:'Главная', history:'История', data:'Данные',
       local:'Локальная beta-версия', productVersion:'PHEISIRAETHA v0.1', title:'Преврати намерение в отслеживаемый цикл.',
       intro:'Определи, чего ты хочешь, зафиксируй усилия и эмоции, наблюдай, что реально произошло, а затем сознательно сохрани или измени намерение.',
       noGoal:'Активного намерения пока нет.', createGoal:'Создать намерение', activeGoal:'Активное намерение',
-      checkin:'Новый check-in', editIntent:'Изменить текущее намерение', cycles:'циклов', next:'Далее', back:'Назад', save:'Сохранить', cancel:'Отмена',
+      checkin:'Новый check-in', editIntent:'Изменить текущее намерение', cycles:'циклов', cycleOne:'цикл', cycleFew:'цикла', cycleMany:'циклов', next:'Далее', back:'Назад', save:'Сохранить', cancel:'Отмена',
       ris:'Зафиксированное состояние намерения (RIS)', primary:'Основная цель', primaryHelp:'Что в конечном итоге ты пытаешься создать, достичь, изменить или завершить?',
       success:'Критерии успеха', successHelp:'Что должно стать реальностью, чтобы ты считал цель достигнутой?',
       scope:'Область', scopeHelp:'Что входит в это намерение или проект?',
@@ -87,6 +95,7 @@
       yes:'Да', no:'Нет', unsure:'Не уверен', changedParts:'Какие части ты сознательно хочешь изменить?',
       revisionHelp:'Только выбранные измерения заменят текущий RIS. Всё остальное останется без изменений.',
       complete:'Завершить check-in', saved:'Check-in сохранён.', noHistory:'Check-in пока нет.',
+      cancelCheckinConfirm:'Отменить текущий check-in?', selectRevisionRequired:'Выбери хотя бы одну часть RIS для изменения.',
       aboutTitle:'О PHEISIRAETHA',
       aboutIntro:'PHEISIRAETHA — это локальный инструмент самонаблюдения, который помогает отслеживать намерение во времени с помощью повторных check-in.',
       aboutPrivacy:'В версии v0.1 записи хранятся локально в этом браузере на этом устройстве. Нет аккаунта, облачной базы данных, рекламного SDK или серверной синхронизации.',
@@ -101,6 +110,54 @@
       evidenceDirect:'Непосредственно наблюдаемые события или условия', evidenceDocumented:'Документированная или записанная информация', evidenceOtherPerson:'Информация, предоставленная или подтверждённая другим человеком', evidenceSubjective:'Моё общее субъективное впечатление', evidenceInsufficient:'Недостаточно информации для оценки', evidenceOther:'Другое',
       freq0:'Вообще нет', freq1:'Реже одного раза в день', freq2:'Примерно раз в день', freq3:'Несколько раз в день', freq4:'Много раз в день', freq5:'Почти постоянно',
       emotions:['Любовь / привязанность','Радость / воодушевление','Надежда / позитивное ожидание','Спокойствие / удовлетворённость','Страх / тревога','Гнев / фрустрация','Грусть / разочарование','Стыд / вина','Нейтрально / почти без эмоций','Другое']
+    },
+
+    de: {
+      brand:'PHEISIRAETHA', languageLabel:'Sprache', home:'Startseite', history:'Verlauf', data:'Daten',
+      local:'Lokale Beta-Version', productVersion:'PHEISIRAETHA v0.1', title:'Mache aus einer Absicht einen nachvollziehbaren Zyklus.',
+      intro:'Definiere, was du erreichen möchtest, halte Aufwand und Emotionen fest, beobachte, was tatsächlich geschieht, und entscheide anschließend bewusst, ob du die Absicht beibehältst oder überarbeitest.',
+      noGoal:'Noch keine aktive Absicht.', createGoal:'Absicht erstellen', activeGoal:'Aktive Absicht',
+      checkin:'Neuer Check-in', editIntent:'Aktuelle Absicht bearbeiten', cycles:'Zyklen', cycleOne:'Zyklus', cycleFew:'Zyklen', cycleMany:'Zyklen', next:'Weiter', back:'Zurück', save:'Speichern', cancel:'Abbrechen',
+      ris:'Ratified Intent State (RIS)', primary:'Hauptziel', primaryHelp:'Was möchtest du letztlich erschaffen, erreichen, verändern oder abschließen?',
+      success:'Erfolgskriterien', successHelp:'Was müsste erfüllt sein, damit du das Vorhaben als erfolgreich betrachtest?',
+      scope:'Umfang', scopeHelp:'Was gehört zu dieser Absicht oder diesem Projekt?',
+      nonGoals:'Nicht-Ziele', nonGoalsHelp:'Was gehört bewusst nicht zum Ziel?',
+      constraints:'Einschränkungen', constraintsHelp:'Welche Grenzen, Regeln oder Bedingungen müssen eingehalten werden?',
+      rationale:'Begründung', rationaleHelp:'Warum ist dir diese Absicht wichtig?',
+      required:'Bitte fülle alle sechs RIS-Felder aus.', created:'Absicht erstellt.', updated:'RIS aktualisiert.',
+      cie:'Aktueller Stand der Absicht', cieIntro:'Beschreibe das Vorhaben so, wie es jetzt besteht. Versuche nicht, deine frühere Formulierung zu wiederholen.',
+      iep:'Absichts- und Energieprofil', oop:'Profil des beobachtbaren Ergebnisses', revise:'Bewusste Überarbeitung',
+      desire:'Wie stark wünschst du dir dieses Ergebnis derzeit?', belief:'Wie stark glaubst du derzeit, dass dieses Ergebnis möglich ist?',
+      emotion:'Welche Emotion beschreibt am besten, wie du dich derzeit in Bezug auf dieses Ergebnis fühlst?', emotionIntensity:'Wie intensiv ist diese Emotion?',
+      mental:'Wie viel gedankliche Aufmerksamkeit und Anstrengung investierst du derzeit?', practical:'Wie viel praktischen Aufwand investierst du derzeit?',
+      frequency:'Wie häufig denkst du an dieses Ergebnis, gehst es gedanklich durch, visualisierst es oder richtest deine Aufmerksamkeit darauf?',
+      actions:'Welche konkreten Handlungen, Zeit, Geldmittel, Ressourcen oder körperlichen Anstrengungen investierst du? Falls keine, schreibe „Keine“.',
+      hours:'Wie viele Stunden hast du in den vergangenen 7 Tagen ungefähr für konkrete Handlungen in Richtung dieses Ergebnisses aufgewendet?',
+      currentState:'Welche beobachtbare Situation oder welches Ergebnis besteht derzeit in Bezug auf diese Absicht?',
+      achievement:'In welchem Maß ist das gewünschte Ergebnis derzeit erreicht?',
+      events:'Welche beobachtbaren Ereignisse oder Veränderungen gab es in den vergangenen 7 Tagen? Falls keine, schreibe „Keine beobachtbare Veränderung.“',
+      direction:'In welche Richtung hat sich die beobachtbare Situation in den vergangenen 7 Tagen insgesamt verändert?',
+      evidence:'Worauf beruht diese Einschätzung? Wähle alle zutreffenden Angaben aus.',
+      external:'Welche äußeren Umstände, Ereignisse oder Bedingungen außerhalb deiner direkten Kontrolle waren relevant? Falls keine, schreibe „Keine bekannt“.',
+      intentional:'Hast du seit dem vorherigen Check-in bewusst einen Teil des Hauptziels, der Erfolgskriterien, des Umfangs, der Nicht-Ziele, der Einschränkungen oder der Begründung verändert?',
+      yes:'Ja', no:'Nein', unsure:'Nicht sicher', changedParts:'Welche Teile möchtest du bewusst überarbeiten?',
+      revisionHelp:'Nur ausgewählte Bereiche ersetzen den aktuellen RIS. Alles andere bleibt unverändert.',
+      complete:'Check-in abschließen', saved:'Check-in gespeichert.', noHistory:'Noch keine Check-ins.',
+      cancelCheckinConfirm:'Diesen Check-in abbrechen?', selectRevisionRequired:'Wähle mindestens einen RIS-Bereich zur Überarbeitung aus.',
+      aboutTitle:'Über PHEISIRAETHA',
+      aboutIntro:'PHEISIRAETHA ist ein lokales Werkzeug zur Selbstreflexion, mit dem eine Absicht über wiederholte Check-ins im Zeitverlauf beobachtet werden kann.',
+      aboutPrivacy:'In Version v0.1 werden deine Einträge lokal in diesem Browser auf diesem Gerät gespeichert. Es gibt kein Konto, keine Cloud-Datenbank, kein Werbe-SDK und keine Serversynchronisierung.',
+      aboutDisclaimer:'PHEISIRAETHA weist nicht nach, dass Gedanken, Emotionen, Absichten oder Aufwand äußere Ereignisse verursachen. Es ist keine medizinische oder psychologische Behandlung.',
+      feedback:'Problem melden / Feedback senden',
+      export:'Sicherung exportieren (JSON)', import:'Sicherung importieren', delete:'Alle lokalen Daten löschen', deleteConfirm:'Den gesamten lokalen PHEISIRAETHA-Datensatz auf diesem Gerät löschen? Ohne exportierte Sicherung kann dies nicht rückgängig gemacht werden.',
+      exported:'Sicherung exportiert.', imported:'Sicherung importiert.', importError:'Diese Datei ist keine gültige PHEISIRAETHA-v0.1-Sicherung.',
+      disclaimer:'Werkzeug zur Selbstreflexion. Es weist nicht nach, dass Gedanken, Emotionen, Absichten oder Aufwand äußere Ereignisse verursachen. Es ist keine medizinische oder psychologische Behandlung.',
+      recommended:'Empfohlener Rhythmus: ein Check-in pro Woche. In v0.1 ist der Zeitraum nicht gesperrt.',
+      summary:'Letzter Stand', achieved:'Erreichungsgrad', desireShort:'Wunschstärke', mentalShort:'Gedanklicher Aufwand', practicalShort:'Praktischer Aufwand',
+      directionToward:'Dem gewünschten Ergebnis angenähert', directionNone:'Keine wesentliche Veränderung', directionAway:'Vom gewünschten Ergebnis entfernt', directionMixed:'Gemischte oder unklare Veränderung', directionUnknown:'Nicht genügend Informationen für eine Einschätzung',
+      evidenceDirect:'Direkt beobachtete Ereignisse oder Bedingungen', evidenceDocumented:'Dokumentierte oder aufgezeichnete Informationen', evidenceOtherPerson:'Von einer anderen Person mitgeteilte oder bestätigte Informationen', evidenceSubjective:'Mein subjektiver Gesamteindruck', evidenceInsufficient:'Nicht genügend Informationen für eine Einschätzung', evidenceOther:'Sonstiges',
+      freq0:'Überhaupt nicht', freq1:'Weniger als einmal pro Tag', freq2:'Etwa einmal pro Tag', freq3:'Mehrmals pro Tag', freq4:'Sehr oft am Tag', freq5:'Fast ununterbrochen',
+      emotions:['Liebe / Zuneigung','Freude / Begeisterung','Hoffnung / positive Erwartung','Ruhe / Zufriedenheit','Angst / Sorge','Ärger / Frustration','Traurigkeit / Enttäuschung','Scham / Schuldgefühl','Neutral / kaum Emotion','Sonstiges']
     }
   };
 
@@ -176,6 +233,44 @@
             'PHEISIRAETHA не утверждает, что мысли, эмоции или намерения вызывают внешние события.',
             'Приложение помогает отделять намерение, действия и наблюдаемые результаты и смотреть, как они изменяются со временем.',
             'Все данные этой версии хранятся только локально на этом устройстве.'
+          ]
+        }
+      ]
+    },
+
+    de: {
+      continue:'Weiter',
+      skip:'Überspringen',
+      start:'Starten',
+      progress:step=>`Schritt ${step} von 4`,
+      screens:[
+        {
+          title:'PHEISIRAETHA',
+          lead:'Von der Absicht zum beobachtbaren Ergebnis.',
+          paragraphs:[
+            'Mit PHEISIRAETHA kannst du festhalten, was du erreichen möchtest, und anschließend beobachten, wie sich deine Handlungen, dein Zustand und die realen Ergebnisse im Laufe der Zeit verändern.'
+          ]
+        },
+        {
+          title:'1. Definiere deine Absicht',
+          paragraphs:[
+            'Erstelle einen RIS — deinen Ratified Intent State: Hauptziel, Erfolgskriterien, Umfang, Nicht-Ziele, Einschränkungen und Begründung.',
+            'Er wird zu deinem Bezugspunkt.'
+          ]
+        },
+        {
+          title:'2. Führe regelmäßig Check-ins durch',
+          paragraphs:[
+            'Bei einem Check-in beschreibst du unabhängig den aktuellen Stand deiner Absicht, deine Emotionen und deinen Aufwand und hältst anschließend das beobachtbare Ergebnis fest.',
+            'Auf diese Weise entsteht mit der Zeit ein Verlauf der Veränderungen.'
+          ]
+        },
+        {
+          title:'3. Beobachte, ohne zu unterstellen',
+          paragraphs:[
+            'PHEISIRAETHA behauptet nicht, dass Gedanken, Emotionen oder Absichten äußere Ereignisse verursachen.',
+            'Die App hilft dabei, Absicht, Handlungen und beobachtbare Ergebnisse voneinander zu trennen und ihre Entwicklung im Laufe der Zeit zu verfolgen.',
+            'Alle Daten dieser Version werden ausschließlich lokal auf diesem Gerät gespeichert.'
           ]
         }
       ]
@@ -274,6 +369,7 @@
   }
 
   let state = load();
+  let currentLang = loadLanguagePreference();
   let view = 'home';
   let wizard = null;
   let risDraft = null;
@@ -293,6 +389,58 @@
     }
   }
 
+  function deviceLanguage(){
+    const locale=String(navigator.language || '').toLowerCase();
+
+    if(locale==='ru' || locale.startsWith('ru-')) return 'ru';
+    if(locale==='de' || locale.startsWith('de-')) return 'de';
+
+    return 'en';
+  }
+
+  function loadLanguagePreference(){
+    const stored=localStorage.getItem(LANGUAGE_KEY);
+
+    if(SUPPORTED_LANGUAGES.includes(stored))
+      return stored;
+
+    let selected;
+
+    try{
+      const legacy=JSON.parse(localStorage.getItem(STORAGE_KEY));
+
+      if(
+        legacy &&
+        legacy.version===APP_VERSION &&
+        ['ru','en'].includes(legacy.lang)
+      ) selected=legacy.lang;
+    }catch{}
+
+    selected=selected || deviceLanguage();
+    localStorage.setItem(LANGUAGE_KEY,selected);
+
+    return selected;
+  }
+
+  function setLanguage(nextLanguage){
+    if(!SUPPORTED_LANGUAGES.includes(nextLanguage))
+      return;
+
+    if(view==='ris')
+      captureRISDraft();
+
+    if(view==='wizard' && wizard)
+      saveStep({trim:false});
+
+    currentLang=nextLanguage;
+    localStorage.setItem(LANGUAGE_KEY,currentLang);
+
+    if(wizard && Number.isInteger(wizard.emotionIndex))
+      wizard.iep.emotion=t('emotions')[wizard.emotionIndex];
+
+    render();
+  }
+
   function persist(){
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }
@@ -306,35 +454,94 @@
   }
 
   function t(k){
-    return T[state.lang]?.[k] ?? T.en[k] ?? k;
+    return T[currentLang]?.[k] ?? T.en[k] ?? k;
   }
 
   function dateLabel(iso){
+    const locales={ru:'ru-RU',en:'en-GB',de:'de-DE'};
+
     return new Intl.DateTimeFormat(
-      state.lang==='ru' ? 'ru-RU' : 'en-GB',
+      locales[currentLang] || locales.en,
       {dateStyle:'medium', timeStyle:'short'}
     ).format(new Date(iso));
   }
 
   function cycleLabel(n){
-    if(state.lang!=='ru') return n===1 ? 'cycle' : 'cycles';
+    if(currentLang!=='ru') return n===1 ? t('cycleOne') : t('cycleMany');
 
     const mod10 = n % 10;
     const mod100 = n % 100;
 
-    if(mod10===1 && mod100!==11) return 'цикл';
+    if(mod10===1 && mod100!==11) return t('cycleOne');
 
     if(
       mod10>=2 &&
       mod10<=4 &&
       (mod100<12 || mod100>14)
-    ) return 'цикла';
+    ) return t('cycleFew');
 
-    return 'циклов';
+    return t('cycleMany');
+  }
+
+  function languageSelector(buttonId,menuId){
+    const options=LANGUAGE_OPTIONS.map(({code,label})=>`
+      <button
+        class="language-option${code===currentLang?' active':''}"
+        type="button"
+        role="menuitemradio"
+        aria-checked="${code===currentLang}"
+        data-language="${code}"
+      >
+        <span>${label}</span>
+        <span class="language-code">${code.toUpperCase()}</span>
+      </button>
+    `).join('');
+
+    return `<div class="language-picker">
+      <button
+        class="lang"
+        id="${buttonId}"
+        type="button"
+        aria-label="${esc(t('languageLabel'))}"
+        aria-haspopup="menu"
+        aria-expanded="false"
+        aria-controls="${menuId}"
+      >${currentLang.toUpperCase()}</button>
+      <div class="language-menu hidden" id="${menuId}" role="menu">${options}</div>
+    </div>`;
+  }
+
+  function bindLanguageSelector(buttonId,menuId){
+    const button=$('#'+buttonId);
+    const menu=$('#'+menuId);
+
+    if(!button || !menu)
+      return;
+
+    button.addEventListener('click',()=>{
+      const willOpen=menu.classList.contains('hidden');
+      menu.classList.toggle('hidden',!willOpen);
+      button.setAttribute('aria-expanded',String(willOpen));
+
+      if(willOpen)
+        $('.language-option.active',menu)?.focus();
+    });
+
+    $$('.language-option',menu).forEach(option=>
+      option.addEventListener('click',()=>setLanguage(option.dataset.language))
+    );
+
+    menu.addEventListener('keydown',event=>{
+      if(event.key==='Escape'){
+        menu.classList.add('hidden');
+        button.setAttribute('aria-expanded','false');
+        button.focus();
+      }
+    });
   }
 
   function shell(content){
-    return `<div class="shell"><header class="topbar"><div class="brand">PHEISIRAETHA</div><button class="lang" id="langBtn">${state.lang==='ru'?'RU':'EN'}</button></header><main>${content}</main>${bottomNav()}</div>`;
+    return `<div class="shell"><header class="topbar"><div class="brand">PHEISIRAETHA</div>${languageSelector('langBtn','langMenu')}</header><main>${content}</main>${bottomNav()}</div>`;
   }
 
   function bottomNav(){
@@ -348,7 +555,7 @@
   function render(){
     const app = document.getElementById('app');
 
-    document.documentElement.lang=state.lang;
+    document.documentElement.lang=currentLang;
     document.body.classList.toggle('is-onboarding',onboardingStep!==null);
 
     if(onboardingStep!==null){
@@ -371,7 +578,7 @@
   }
 
   function renderOnboarding(){
-    const copy=ONBOARDING[state.lang] || ONBOARDING.en;
+    const copy=ONBOARDING[currentLang] || ONBOARDING.en;
     const screen=copy.screens[onboardingStep-1];
     const progressLabel=copy.progress(onboardingStep);
     const dots=copy.screens.map((_,index)=>{
@@ -388,7 +595,7 @@
     return `<div class="onboarding-shell">
       <header class="onboarding-topbar">
         <div class="brand">PHEISIRAETHA</div>
-        <button class="lang" id="onboardingLangBtn" type="button">${state.lang==='ru'?'RU':'EN'}</button>
+        ${languageSelector('onboardingLangBtn','onboardingLangMenu')}
       </header>
 
       <main class="onboarding-main">
@@ -416,11 +623,7 @@
   }
 
   function bindOnboarding(){
-    $('#onboardingLangBtn')?.addEventListener('click',()=>{
-      state.lang=state.lang==='ru' ? 'en' : 'ru';
-      persist();
-      render();
-    });
+    bindLanguageSelector('onboardingLangBtn','onboardingLangMenu');
 
     $('#onboardingNext')?.addEventListener('click',()=>{
       onboardingStep=Math.min(4,onboardingStep+1);
@@ -1062,29 +1265,7 @@
   }
 
   function bindCommon(){
-
-    $('#langBtn')?.addEventListener(
-      'click',
-      ()=>{
-        if(view==='ris')
-          captureRISDraft();
-
-        if(view==='wizard' && wizard)
-          saveStep({trim:false});
-
-        state.lang =
-          state.lang==='ru'
-          ? 'en'
-          : 'ru';
-
-        if(wizard && Number.isInteger(wizard.emotionIndex))
-          wizard.iep.emotion=
-            t('emotions')[wizard.emotionIndex];
-
-        persist();
-        render();
-      }
-    );
+    bindLanguageSelector('langBtn','langMenu');
 
     $$('[data-nav]').forEach(
       b=>b.addEventListener(
@@ -1320,11 +1501,7 @@
       ()=>{
 
         if(
-          confirm(
-            state.lang==='ru'
-            ? 'Отменить текущий check-in?'
-            : 'Cancel this check-in?'
-          )
+          confirm(t('cancelCheckinConfirm'))
         ){
 
           wizard=null;
@@ -1404,9 +1581,7 @@
         ){
 
           $('#wizMsg').textContent=
-            state.lang==='ru'
-            ? 'Выбери хотя бы одну часть RIS для изменения.'
-            : 'Select at least one RIS dimension to revise.';
+            t('selectRevisionRequired');
 
           $('#wizMsg').className='badge-danger';
 
