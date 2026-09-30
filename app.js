@@ -490,6 +490,7 @@
         type="button"
         role="menuitemradio"
         aria-checked="${code===currentLang}"
+        tabindex="${code===currentLang?'0':'-1'}"
         data-language="${code}"
       >
         <span>${label}</span>
@@ -502,12 +503,12 @@
         class="lang"
         id="${buttonId}"
         type="button"
-        aria-label="${esc(t('languageLabel'))}"
+        aria-label="${esc(t('languageLabel'))}: ${currentLang.toUpperCase()}"
         aria-haspopup="menu"
         aria-expanded="false"
         aria-controls="${menuId}"
       >${currentLang.toUpperCase()}</button>
-      <div class="language-menu hidden" id="${menuId}" role="menu">${options}</div>
+      <div class="language-menu hidden" id="${menuId}" role="menu" aria-labelledby="${buttonId}">${options}</div>
     </div>`;
   }
 
@@ -518,25 +519,80 @@
     if(!button || !menu)
       return;
 
+    const picker=button.closest('.language-picker');
+    const options=$$('.language-option',menu);
+    const closeMenu=({restoreFocus=false}={})=>{
+      menu.classList.add('hidden');
+      button.setAttribute('aria-expanded','false');
+
+      if(restoreFocus)
+        button.focus();
+    };
+
+    const focusOption=index=>{
+      const count=options.length;
+
+      if(!count)
+        return;
+
+      const next=(index+count)%count;
+
+      options.forEach((option,optionIndex)=>
+        option.tabIndex=optionIndex===next ? 0 : -1
+      );
+
+      options[next].focus();
+    };
+
     button.addEventListener('click',()=>{
       const willOpen=menu.classList.contains('hidden');
-      menu.classList.toggle('hidden',!willOpen);
-      button.setAttribute('aria-expanded',String(willOpen));
 
-      if(willOpen)
-        $('.language-option.active',menu)?.focus();
+      if(!willOpen){
+        closeMenu();
+        return;
+      }
+
+      menu.classList.remove('hidden');
+      button.setAttribute('aria-expanded','true');
+
+      const activeIndex=options.findIndex(option=>
+        option.classList.contains('active')
+      );
+
+      focusOption(activeIndex<0 ? 0 : activeIndex);
     });
 
-    $$('.language-option',menu).forEach(option=>
-      option.addEventListener('click',()=>setLanguage(option.dataset.language))
+    options.forEach(option=>
+      option.addEventListener('click',()=>{
+        setLanguage(option.dataset.language);
+        document.getElementById(buttonId)?.focus();
+      })
     );
 
     menu.addEventListener('keydown',event=>{
       if(event.key==='Escape'){
-        menu.classList.add('hidden');
-        button.setAttribute('aria-expanded','false');
-        button.focus();
+        event.preventDefault();
+        closeMenu({restoreFocus:true});
+        return;
       }
+
+      const current=options.indexOf(document.activeElement);
+      const keyTargets={
+        ArrowDown:current+1,
+        ArrowUp:current-1,
+        Home:0,
+        End:options.length-1
+      };
+
+      if(Object.hasOwn(keyTargets,event.key)){
+        event.preventDefault();
+        focusOption(keyTargets[event.key]);
+      }
+    });
+
+    picker?.addEventListener('focusout',event=>{
+      if(!picker.contains(event.relatedTarget))
+        closeMenu();
     });
   }
 
@@ -546,9 +602,9 @@
 
   function bottomNav(){
     return `<nav class="bottomnav">
-      <button data-nav="home" class="${view==='home'?'active':''}">${t('home')}</button>
-      <button data-nav="history" class="${view==='history'?'active':''}">${t('history')}</button>
-      <button data-nav="data" class="${view==='data'?'active':''}">${t('data')}</button>
+      <button data-nav="home" class="${view==='home'?'active':''}"${view==='home'?' aria-current="page"':''}>${t('home')}</button>
+      <button data-nav="history" class="${view==='history'?'active':''}"${view==='history'?' aria-current="page"':''}>${t('history')}</button>
+      <button data-nav="data" class="${view==='data'?'active':''}"${view==='data'?' aria-current="page"':''}>${t('data')}</button>
     </nav>`;
   }
 
@@ -575,6 +631,17 @@
     if(view==='ris') bindRIS();
     if(view==='wizard') bindWizard();
     if(view==='data') bindData();
+  }
+
+  function renderAndFocusHeading(){
+    render();
+
+    const heading=$('#app main h1');
+
+    if(heading){
+      heading.tabIndex=-1;
+      heading.focus();
+    }
   }
 
   function renderOnboarding(){
@@ -627,7 +694,7 @@
 
     $('#onboardingNext')?.addEventListener('click',()=>{
       onboardingStep=Math.min(4,onboardingStep+1);
-      render();
+      renderAndFocusHeading();
     });
 
     $('#onboardingSkip')?.addEventListener('click',completeOnboarding);
@@ -640,7 +707,7 @@
     view='home';
     wizard=null;
     risDraft=null;
-    render();
+    renderAndFocusHeading();
   }
 
   function renderHome(){
@@ -710,9 +777,11 @@
   }
 
   function field(key, value='', helpKey){
+    const helpId=helpKey ? `${key}Help` : '';
+
     return `<label for="${key}">${t(key)}</label>
-    <textarea id="${key}">${esc(value)}</textarea>
-    ${helpKey ? `<div class="help">${t(helpKey)}</div>` : ''}`;
+    <textarea id="${key}" required${helpId ? ` aria-describedby="${helpId}"` : ''}>${esc(value)}</textarea>
+    ${helpKey ? `<div class="help" id="${helpId}">${t(helpKey)}</div>` : ''}`;
   }
 
   function renderRIS(){
@@ -738,7 +807,7 @@
 
       <button class="btn primary" id="risSave" style="margin-top:18px">${t('save')}</button>
 
-      <div id="risMsg" class="help"></div>
+      <div id="risMsg" class="help" aria-live="polite" aria-atomic="true"></div>
     </div>`;
   }
 
@@ -787,7 +856,7 @@
     };
 
     view='wizard';
-    render();
+    renderAndFocusHeading();
   }
 
   function renderWizard(){
@@ -811,7 +880,7 @@
     return `<div class="row">
 
       <div>
-        <span class="kicker">${labels[step-1]}</span>
+        <span class="kicker" aria-hidden="true">${labels[step-1]}</span>
         <h1>${labels[step-1]}</h1>
       </div>
 
@@ -819,7 +888,7 @@
 
     </div>
 
-    <div class="progress">
+    <div class="progress" role="progressbar" aria-label="${esc(labels[step-1])}" aria-valuemin="1" aria-valuemax="4" aria-valuenow="${step}">
       <span style="width:${step*25}%"></span>
     </div>
 
@@ -848,7 +917,7 @@
 
   function range(id,label,val){
 
-    return `<label>${label}</label>
+    return `<label for="${id}">${label}</label>
 
     <div class="range-line">
 
@@ -861,7 +930,7 @@
         value="${val}"
       >
 
-      <span class="range-value" id="${id}Val">${val}</span>
+      <span class="range-value" id="${id}Val" aria-hidden="true">${val}</span>
 
     </div>`;
   }
@@ -882,7 +951,7 @@
       ${range('desire',t('desire'),x.desire)}
       ${range('belief',t('belief'),x.belief)}
 
-      <label>${t('emotion')}</label>
+      <label for="emotion">${t('emotion')}</label>
 
       <select id="emotion">
         ${ems.map((e,i)=>`<option ${i===emotionIndex?'selected':''}>${esc(e)}</option>`).join('')}
@@ -894,7 +963,7 @@
 
       ${range('practical',t('practical'),x.practical)}
 
-      <label>${t('frequency')}</label>
+      <label for="frequency">${t('frequency')}</label>
 
       <select id="frequency">
 
@@ -906,11 +975,11 @@
 
       </select>
 
-      <label>${t('actions')}</label>
+      <label for="actions">${t('actions')}</label>
 
       <textarea id="actions">${esc(x.actions)}</textarea>
 
-      <label>${t('hours')}</label>
+      <label for="hours">${t('hours')}</label>
 
       <input
         type="number"
@@ -947,17 +1016,17 @@
 
     return `<div class="card flat">
 
-      <label>${t('currentState')}</label>
+      <label for="currentState">${t('currentState')}</label>
 
       <textarea id="currentState">${esc(x.currentState)}</textarea>
 
       ${range('achievement',t('achievement'),x.achievement)}
 
-      <label>${t('events')}</label>
+      <label for="events">${t('events')}</label>
 
       <textarea id="events">${esc(x.events)}</textarea>
 
-      <label>${t('direction')}</label>
+      <label for="direction">${t('direction')}</label>
 
       <select id="direction">
 
@@ -983,11 +1052,13 @@
 
       </select>
 
-      <label>${t('evidence')}</label>
+      <fieldset class="choice-group">
+
+      <legend>${t('evidence')}</legend>
 
       ${
         evid.map(([v,k])=>`
-          <div class="choice">
+          <label class="choice">
 
             <input
               type="checkbox"
@@ -997,11 +1068,13 @@
 
             <span>${t(k)}</span>
 
-          </div>
+          </label>
         `).join('')
       }
 
-      <label>${t('external')}</label>
+      </fieldset>
+
+      <label for="external">${t('external')}</label>
 
       <textarea id="external">${esc(x.external)}</textarea>
 
@@ -1029,12 +1102,14 @@
 
     return `<div class="card flat">
 
-      <label>${t('intentional')}</label>
+      <fieldset class="choice-group">
+
+      <legend>${t('intentional')}</legend>
 
       ${
         [['yes','yes'],['no','no'],['unsure','unsure']]
         .map(([v,k])=>`
-          <div class="choice">
+          <label class="choice">
 
             <input
               type="radio"
@@ -1045,9 +1120,11 @@
 
             <span>${t(k)}</span>
 
-          </div>
+          </label>
         `).join('')
       }
+
+      </fieldset>
 
       <div
         id="revisionBox"
@@ -1056,13 +1133,15 @@
 
         <div class="divider"></div>
 
-        <label>${t('changedParts')}</label>
+        <fieldset class="choice-group" aria-describedby="revisionHelp">
 
-        <div class="help">${t('revisionHelp')}</div>
+        <legend>${t('changedParts')}</legend>
+
+        <div class="help" id="revisionHelp">${t('revisionHelp')}</div>
 
         ${
           dims.map(([v,k])=>`
-            <div class="choice">
+            <label class="choice">
 
               <input
                 type="checkbox"
@@ -1072,9 +1151,11 @@
 
               <span>${t(k)}</span>
 
-            </div>
+            </label>
           `).join('')
         }
+
+        </fieldset>
 
         <div id="revisionFields">
           ${renderRevisionFields()}
@@ -1090,7 +1171,7 @@
 
       </div>
 
-      <div id="wizMsg" class="help"></div>
+      <div id="wizMsg" class="help" aria-live="polite" aria-atomic="true"></div>
 
     </div>`;
   }
@@ -1102,8 +1183,8 @@
 
     return wizard.selected
       .map(k=>`
-        <label>${t(k)}</label>
-        <textarea data-revision="${k}">${esc(
+        <label for="revision-${k}">${t(k)}</label>
+        <textarea id="revision-${k}" data-revision="${k}">${esc(
           wizard.revision[k] ??
           wizard.cie[k] ??
           ''
@@ -1115,7 +1196,8 @@
   function renderHistory(){
 
     if(!state.intent)
-      return `<div class="card empty">
+      return `<h1>${t('history')}</h1>
+      <div class="card empty">
         <h2>${t('noGoal')}</h2>
       </div>`;
 
@@ -1274,7 +1356,7 @@
           view=b.dataset.nav;
           wizard=null;
           risDraft=null;
-          render();
+          renderAndFocusHeading();
         }
       )
     );
@@ -1284,7 +1366,7 @@
       ()=>{
         risDraft=risValues();
         view='ris';
-        render();
+        renderAndFocusHeading();
       }
     );
 
@@ -1293,7 +1375,7 @@
       ()=>{
         risDraft=risValues(state.intent?.ris);
         view='ris';
-        render();
+        renderAndFocusHeading();
       }
     );
 
@@ -1305,12 +1387,14 @@
 
   function bindRIS(){
 
+    bindRequiredTextFields();
+
     $('#risCancel').addEventListener(
       'click',
       ()=>{
         risDraft=null;
         view='home';
-        render();
+        renderAndFocusHeading();
       }
     );
 
@@ -1328,9 +1412,13 @@
           .some(v=>!v)
         ){
 
+          markRequiredTextFields('risMsg');
+
           $('#risMsg').textContent=t('required');
 
           $('#risMsg').className='badge-danger';
+
+          $('#risMsg').setAttribute('role','alert');
 
           return;
         }
@@ -1362,10 +1450,12 @@
 
         $('#risMsg').className='badge-ok';
 
+        $('#risMsg').setAttribute('role','status');
+
         setTimeout(
           ()=>{
             view='home';
-            render();
+            renderAndFocusHeading();
           },
           450
         );
@@ -1404,6 +1494,45 @@
         k=>[k,$('#'+k)?.value ?? risDraft?.[k] ?? '']
       )
     );
+  }
+
+  function bindRequiredTextFields(){
+    RIS_FIELDS.forEach(key=>{
+      const field=$('#'+key);
+
+      field?.addEventListener('input',()=>{
+        if(field.value.trim()){
+          field.removeAttribute('aria-invalid');
+          field.removeAttribute('aria-errormessage');
+        }
+      });
+    });
+  }
+
+  function markRequiredTextFields(messageId){
+    let firstInvalid=null;
+
+    RIS_FIELDS.forEach(key=>{
+      const field=$('#'+key);
+
+      if(!field)
+        return;
+
+      if(field.value.trim()){
+        field.removeAttribute('aria-invalid');
+        field.removeAttribute('aria-errormessage');
+        return;
+      }
+
+      field.setAttribute('aria-invalid','true');
+
+      if(messageId)
+        field.setAttribute('aria-errormessage',messageId);
+
+      firstInvalid=firstInvalid || field;
+    });
+
+    firstInvalid?.focus();
   }
 
   function saveStep({trim=true}={}){
@@ -1496,6 +1625,9 @@
 
     syncRanges();
 
+    if(wizard.step===1)
+      bindRequiredTextFields();
+
     $('#wizCancel')?.addEventListener(
       'click',
       ()=>{
@@ -1506,7 +1638,7 @@
 
           wizard=null;
           view='home';
-          render();
+          renderAndFocusHeading();
         }
       }
     );
@@ -1519,12 +1651,14 @@
 
           alert(t('required'));
 
+          markRequiredTextFields();
+
           return;
         }
 
         wizard.step++;
 
-        render();
+        renderAndFocusHeading();
       }
     );
 
@@ -1536,7 +1670,7 @@
 
         wizard.step--;
 
-        render();
+        renderAndFocusHeading();
       }
     );
 
@@ -1545,10 +1679,14 @@
       r=>r.addEventListener(
         'change',
         ()=>{
+          const value=r.value;
+
           saveStep({trim:false});
-          wizard.intentional=r.value;
+          wizard.intentional=value;
 
           render();
+
+          $(`input[name="intentional"][value="${value}"]`)?.focus();
         }
       )
     );
@@ -1558,6 +1696,8 @@
       c=>c.addEventListener(
         'change',
         ()=>{
+          const dimension=c.dataset.dim;
+
           saveStep({trim:false});
 
           wizard.selected=
@@ -1565,6 +1705,8 @@
             .map(x=>x.dataset.dim);
 
           render();
+
+          $(`[data-dim="${dimension}"]`)?.focus();
         }
       )
     );
@@ -1584,6 +1726,8 @@
             t('selectRevisionRequired');
 
           $('#wizMsg').className='badge-danger';
+
+          $('#wizMsg').setAttribute('role','alert');
 
           return;
         }
@@ -1626,7 +1770,7 @@
 
         view='home';
 
-        render();
+        renderAndFocusHeading();
 
         setTimeout(
           ()=>alert(t('saved')),
@@ -1688,7 +1832,7 @@
 
           alert(t('imported'));
 
-          render();
+          renderAndFocusHeading();
 
         }catch{
 
@@ -1711,7 +1855,7 @@
 
           view='home';
 
-          render();
+          renderAndFocusHeading();
         }
       }
     );
