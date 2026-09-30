@@ -1,4 +1,4 @@
-const CACHE='pheisiraetha-v12';
+const CACHE='pheisiraetha-v13';
 
 const ASSETS=[
   './',
@@ -6,6 +6,7 @@ const ASSETS=[
   './app.css',
   './launch.js',
   './app.js',
+  './locales.js',
   './manifest.webmanifest?v=07',
   './launch-screen.jpg',
   './icon-192.png?v=07',
