@@ -55,6 +55,7 @@ h1, h2, h3, p, label, legend, .help { overflow-wrap:anywhere; }
 .btn.secondary { background:#fff; color:var(--ink); border-color:#667085; }
 .btn.danger { background:#fff; color:var(--danger); border-color:var(--danger); }
 .btn.small { width:auto; min-height:44px; padding:8px 11px; font-size:14px; }
+.btn.secondary.small { flex:0 0 auto; min-width:max-content; white-space:nowrap; word-break:normal; overflow-wrap:normal; hyphens:none; line-height:1.35; }
 .feedback-link { display:flex; align-items:center; justify-content:center; text-align:center; text-decoration:none; overflow-wrap:anywhere; }
 .row { display:flex; align-items:center; justify-content:space-between; gap:10px; }
 .row > :first-child { min-width:0; overflow-wrap:anywhere; }
