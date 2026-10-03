@@ -479,7 +479,7 @@
       <div class="card flat">
         <div class="row">
           <h2>${t('ris')}</h2>
-          <span class="pill">${c.length} ${cycleLabel(c.length)}</span>
+          <span class="pill">${esc(String(c.length))} ${cycleLabel(c.length)}</span>
         </div>
         ${risSummary(state.intent.ris)}
       </div>
@@ -491,22 +491,22 @@
 
           <div class="metric">
             <span>${t('achieved')}</span>
-            <strong>${last.oop.achievement}/10</strong>
+            <strong>${esc(String(last.oop.achievement))}/10</strong>
           </div>
 
           <div class="metric">
             <span>${t('desireShort')}</span>
-            <strong>${last.iep.desire}/10</strong>
+            <strong>${esc(String(last.iep.desire))}/10</strong>
           </div>
 
           <div class="metric">
             <span>${t('mentalShort')}</span>
-            <strong>${last.iep.mental}/10</strong>
+            <strong>${esc(String(last.iep.mental))}/10</strong>
           </div>
 
           <div class="metric">
             <span>${t('practicalShort')}</span>
-            <strong>${last.iep.practical}/10</strong>
+            <strong>${esc(String(last.iep.practical))}/10</strong>
           </div>
 
         </div>
@@ -959,7 +959,7 @@
       <h2 dir="auto">${esc(state.intent.ris.primary)}</h2>
 
       <p class="muted">
-        ${c.length} ${cycleLabel(c.length)}
+        ${esc(String(c.length))} ${cycleLabel(c.length)}
       </p>
 
     </div>
@@ -979,19 +979,19 @@
               <h3>${dateLabel(x.createdAt)}</h3>
 
               <span class="pill">
-                ${t('achieved')}: ${x.oop.achievement}/10
+                ${t('achieved')}: ${esc(String(x.oop.achievement))}/10
               </span>
 
               <span class="pill">
-                ${t('desireShort')}: ${x.iep.desire}/10
+                ${t('desireShort')}: ${esc(String(x.iep.desire))}/10
               </span>
 
               <span class="pill">
-                ${t('mentalShort')}: ${x.iep.mental}/10
+                ${t('mentalShort')}: ${esc(String(x.iep.mental))}/10
               </span>
 
               <span class="pill">
-                ${t('practicalShort')}: ${x.iep.practical}/10
+                ${t('practicalShort')}: ${esc(String(x.iep.practical))}/10
               </span>
 
               <p dir="auto">
