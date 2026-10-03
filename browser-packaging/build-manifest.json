@@ -1,0 +1,76 @@
+{
+  "manifestVersion": 1,
+  "phase": "2B-3B-1",
+  "specCommit": "87c4e91c23d1c59bd4735d7fd75c41f35c533797",
+  "productionCommit": "255a5d9d27461dcacaebc1bc80ab322dd54b4de8",
+  "commands": {
+    "install": "npm ci --prefix browser-packaging --ignore-scripts --no-audit --no-fund",
+    "build": "npm run build --prefix browser-packaging",
+    "verify": "npm run verify --prefix browser-packaging"
+  },
+  "toolchain": {
+    "node": "24.19.0",
+    "npm": "11.9.0",
+    "esbuild": "0.25.5",
+    "esbuildPackageIntegrity": "sha512-P8OtKZRv/5J5hhz0cUAdu/cLuPIKXpQl1R9pZtvmHWQvrAUVd0UNIPT4IB4W3rNOqVO0rlqHmCIbSwxh/c9yUQ==",
+    "lockfileSha256": "522a4f85fc330f7b9123de38c59aa7b77d7d0176ca19300f4805910afb210ec8"
+  },
+  "profile": {
+    "entryPoints": [
+      "entry.cjs"
+    ],
+    "outfile": "analytics-v1.js",
+    "bundle": true,
+    "platform": "browser",
+    "format": "iife",
+    "minify": false,
+    "treeShaking": false,
+    "plugins": [],
+    "target": [
+      "es2022"
+    ],
+    "charset": "utf8",
+    "legalComments": "inline",
+    "sourcemap": false,
+    "sourcesContent": false,
+    "splitting": false,
+    "keepNames": false,
+    "external": [],
+    "define": {},
+    "inject": [],
+    "write": false,
+    "metafile": true,
+    "logLevel": "silent"
+  },
+  "inputs": [
+    {
+      "file": "analysis.js",
+      "commit": "94b112488e576e08495443d93c048a528c39aac7",
+      "blob": "cc6c515dd86cd957d2f199d064372ef6817deb7e",
+      "sha256": "a712af8fa74a8992e49972f9b217f268da444bcb062fa91824aee7cd9bbdf5da"
+    },
+    {
+      "file": "safety.js",
+      "commit": "74b77f0b821a93e1910e40f5c29c459c126e6d42",
+      "blob": "e70d5d5a411d1f47e59ee2203a211cb2b7d15df5",
+      "sha256": "ad6f6d57665c23fc87b49c1342e0a88ca32e4f77ceb2bb5377a21c043c177b70"
+    }
+  ],
+  "resolution": {
+    "importer": "frozen/safety.js",
+    "specifier": "./analysis.js",
+    "resolved": "frozen/analysis.js",
+    "analysisModuleCount": 1,
+    "externalImports": []
+  },
+  "entry": {
+    "file": "browser-packaging/entry.cjs",
+    "sha256": "40cab1b1f9913f25a9ae34bf35b47763dc7a232189e77fbe5f10f32f3b52a8a3"
+  },
+  "output": {
+    "file": "browser-packaging/artifacts/analytics-v1.45deb294b2ecc2a8a1f3bf7067d5822d0676841ab82c36d4c95db08b9bfa821a.js",
+    "sha256": "45deb294b2ecc2a8a1f3bf7067d5822d0676841ab82c36d4c95db08b9bfa821a",
+    "sizeBytes": 188626
+  },
+  "exposure": "private IIFE; no global exports or evaluate facade; no production analytics runtime"
+}

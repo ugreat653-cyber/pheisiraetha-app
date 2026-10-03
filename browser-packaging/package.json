@@ -1,0 +1,17 @@
+{
+  "name": "pheisiraetha-frozen-browser-packaging",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Build-only packaging of exact frozen Analysis and Safety Git blobs",
+  "scripts": {
+    "build": "node build.cjs",
+    "verify": "node verify.cjs"
+  },
+  "engines": {
+    "node": "24.19.0",
+    "npm": "11.9.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.5"
+  }
+}

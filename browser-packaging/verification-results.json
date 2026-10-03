@@ -1,0 +1,230 @@
+{
+  "artifactSha256": "45deb294b2ecc2a8a1f3bf7067d5822d0676841ab82c36d4c95db08b9bfa821a",
+  "frozenInputs": "PASS: exact blobs, hashes, bytes unchanged; one shared Analysis module",
+  "reproducibility": "PASS: two fresh staging builds equal recorded artifact byte-for-byte",
+  "cleanInstall": "PASS: fresh checkout, empty npm cache, locked install, identical artifact and manifest",
+  "namespace": "PASS: zero global additions/changes; two loads; no Node globals, raw APIs or test surface",
+  "runtimeIO": "PASS: zero network/DOM/storage accesses; no external imports",
+  "analysisParity": {
+    "passed": 22,
+    "failed": 0,
+    "cases": [
+      {
+        "name": "no intent",
+        "status": "EMPTY",
+        "primary": null,
+        "secondary": null
+      },
+      {
+        "name": "zero cycles",
+        "status": "EMPTY",
+        "primary": null,
+        "secondary": null
+      },
+      {
+        "name": "current known category",
+        "status": "READY",
+        "primary": "REF-01",
+        "secondary": "CTX-02"
+      },
+      {
+        "name": "current unlisted category",
+        "status": "READY",
+        "primary": "REF-01",
+        "secondary": "CTX-02"
+      },
+      {
+        "name": "mapped category ru",
+        "status": "READY",
+        "primary": "REF-01",
+        "secondary": "CTX-02"
+      },
+      {
+        "name": "mapped category de",
+        "status": "READY",
+        "primary": "REF-01",
+        "secondary": "CTX-02"
+      },
+      {
+        "name": "mapped category ar",
+        "status": "READY",
+        "primary": "REF-01",
+        "secondary": "CTX-02"
+      },
+      {
+        "name": "exact decimals",
+        "status": "READY",
+        "primary": "REF-01",
+        "secondary": "CTX-02"
+      },
+      {
+        "name": "two record increase",
+        "status": "READY",
+        "primary": "CMP-01:practical",
+        "secondary": "CMP-01:achievement"
+      },
+      {
+        "name": "two record decrease",
+        "status": "READY",
+        "primary": "CMP-01:practical",
+        "secondary": "CMP-01:achievement"
+      },
+      {
+        "name": "separate hours comparison",
+        "status": "READY",
+        "primary": "CMP-01:hours",
+        "secondary": "CMP-01:achievement"
+      },
+      {
+        "name": "ordinal frequency comparison",
+        "status": "READY",
+        "primary": "CMP-02:frequency",
+        "secondary": "CMP-01:practical"
+      },
+      {
+        "name": "three record decline",
+        "status": "READY",
+        "primary": "REL-01",
+        "secondary": "OUT-02"
+      },
+      {
+        "name": "five record window",
+        "status": "READY",
+        "primary": "OUT-02",
+        "secondary": "MEN-02"
+      },
+      {
+        "name": "explicit revision",
+        "status": "READY",
+        "primary": "REV-01",
+        "secondary": "CTX-02"
+      },
+      {
+        "name": "conflicting revision",
+        "status": "MIXED",
+        "primary": "MIX-01",
+        "secondary": "CTX-02"
+      },
+      {
+        "name": "mixed outcome direction",
+        "status": "MIXED",
+        "primary": "MIX-01",
+        "secondary": "CTX-02"
+      },
+      {
+        "name": "numeric string preserved",
+        "status": "INSUFFICIENT",
+        "primary": "QUAL-01",
+        "secondary": "CTX-02"
+      },
+      {
+        "name": "duplicate IDs",
+        "status": "INSUFFICIENT",
+        "primary": "QUAL-01",
+        "secondary": "CTX-02"
+      },
+      {
+        "name": "blank ID",
+        "status": "INSUFFICIENT",
+        "primary": "QUAL-01",
+        "secondary": "CTX-02"
+      },
+      {
+        "name": "invalid chronology",
+        "status": "INSUFFICIENT",
+        "primary": "QUAL-01",
+        "secondary": "CTX-02"
+      },
+      {
+        "name": "unsupported source version",
+        "status": "UNSUPPORTED_SOURCE",
+        "primary": null,
+        "secondary": null
+      }
+    ]
+  },
+  "safetyParity": {
+    "passed": 15,
+    "failed": 0,
+    "cases": [
+      {
+        "name": "MF3 primary plus E30 ALLOW",
+        "verdict": "ALLOW",
+        "mode": "APPROVED_BUNDLE"
+      },
+      {
+        "name": "current unlisted category ALLOW",
+        "verdict": "ALLOW",
+        "mode": "APPROVED_BUNDLE"
+      },
+      {
+        "name": "MF4 primary and secondary plus E30 ALLOW",
+        "verdict": "ALLOW",
+        "mode": "APPROVED_BUNDLE"
+      },
+      {
+        "name": "separate hours ALLOW",
+        "verdict": "ALLOW",
+        "mode": "APPROVED_BUNDLE"
+      },
+      {
+        "name": "ordinal frequency ALLOW",
+        "verdict": "ALLOW",
+        "mode": "APPROVED_BUNDLE"
+      },
+      {
+        "name": "unknown template UNKNOWN",
+        "verdict": "UNKNOWN",
+        "mode": "FALLBACK_ONLY"
+      },
+      {
+        "name": "wrong policy UNKNOWN",
+        "verdict": "UNKNOWN",
+        "mode": "FALLBACK_ONLY"
+      },
+      {
+        "name": "wrong provenance UNKNOWN",
+        "verdict": "UNKNOWN",
+        "mode": "FALLBACK_ONLY"
+      },
+      {
+        "name": "missing E30 UNKNOWN",
+        "verdict": "UNKNOWN",
+        "mode": "FALLBACK_ONLY"
+      },
+      {
+        "name": "unregistered Interpretation UNKNOWN",
+        "verdict": "UNKNOWN",
+        "mode": "FALLBACK_ONLY"
+      },
+      {
+        "name": "secondary Next Focus HOLD",
+        "verdict": "HOLD",
+        "mode": "FALLBACK_ONLY"
+      },
+      {
+        "name": "capability Next Focus HOLD",
+        "verdict": "HOLD",
+        "mode": "FALLBACK_ONLY"
+      },
+      {
+        "name": "failed secondary atomic UNKNOWN",
+        "verdict": "UNKNOWN",
+        "mode": "FALLBACK_ONLY"
+      },
+      {
+        "name": "empty analytical plan UNKNOWN",
+        "verdict": "UNKNOWN",
+        "mode": "FALLBACK_ONLY"
+      },
+      {
+        "name": "malformed source UNKNOWN",
+        "verdict": "UNKNOWN",
+        "mode": "FALLBACK_ONLY"
+      }
+    ]
+  },
+  "sourceMutation": "PASS: Node and bundled inputs and frozen bytes unchanged",
+  "production": "PASS: all 17 baseline files unchanged; CACHE v16; APP_VERSION 0.1.0; origin/main unchanged",
+  "completeFrozenSuiteRerun": false
+}
