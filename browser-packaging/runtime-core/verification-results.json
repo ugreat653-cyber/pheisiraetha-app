@@ -1,0 +1,127 @@
+{
+  "phase": "2B-3B-2A",
+  "branch": "phase2b-analytics-runtime-core",
+  "requiredSoleParent": "05ff32a421b7e013a91932516b97d577eb780405",
+  "authoritativeSpecCommit": "87c4e91c23d1c59bd4735d7fd75c41f35c533797",
+  "verificationCommand": "node browser-packaging/runtime-core/verify.cjs",
+  "focusedTests": {
+    "command": "node --test --test-reporter=tap browser-packaging/runtime-core/source-snapshot.test.cjs browser-packaging/runtime-core/presentation-plan.test.cjs browser-packaging/runtime-core/browser-isolation.test.cjs",
+    "nodeVersion": "24.19.0",
+    "tests": 160,
+    "pass": 160,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "todo": 0
+  },
+  "adapter": {
+    "result": "PASS",
+    "contract": "detached descriptor-only JSON-compatible plain-data copy",
+    "schemaValidation": false,
+    "valueCoercion": false,
+    "defaultRecovery": false,
+    "accessorCalls": 0,
+    "unknownPropertiesPreserved": true,
+    "malformedStoredValuesPreserved": true,
+    "bidirectionalDetachment": true,
+    "ownProtoKeyPreserved": true,
+    "unsupportedRepresentation": "SOURCE_NOT_JSON_PLAIN_DATA"
+  },
+  "plan": {
+    "result": "PASS",
+    "contract": "build-internal exact frozen registry tuple and reference request",
+    "reachableManifests": [
+      "safety.manifest.primaryFactualWithCapability",
+      "safety.manifest.primaryAndSecondaryFactualWithCapability"
+    ],
+    "componentCounts": [
+      5,
+      9
+    ],
+    "emptyManifestId": null,
+    "exactE30": true,
+    "fullSevenFieldCandidateIdentity": true,
+    "bindingsContainDisplayValues": false,
+    "secondaryPromotion": false,
+    "componentDropping": false,
+    "manifestDowngrade": false,
+    "inputMutation": false,
+    "deterministicRepeatedOutput": true,
+    "failure": "fixed RuntimeCoreFailure code; no partial plan or fallback approval"
+  },
+  "mappingCoverage": {
+    "registeredCandidateTuples": 52,
+    "reachableCandidateTuples": 48,
+    "exercisedReachableTuples": 48,
+    "insightTemplates": 25,
+    "exercisedInsightTemplates": 25,
+    "actualSelectionScenarios": 48,
+    "safetyOracleBundles": {
+      "allow": 48,
+      "fail": 0
+    },
+    "additionalMixedPriorityBundles": {
+      "allow": 2,
+      "fail": 0
+    },
+    "genericWhyEntries": [
+      "E27",
+      "E28",
+      "E29"
+    ],
+    "capabilityEntry": "E30",
+    "unreachableRegisteredTuples": "REF B1/B2 x known/unavailable; actual selection remains QUAL/REV",
+    "nodeBrowserCoreParityCases": 48,
+    "fullFrozenSafetySuiteRun": false
+  },
+  "frozenInputs": [
+    {
+      "file": "analysis.js",
+      "commit": "94b112488e576e08495443d93c048a528c39aac7",
+      "blob": "cc6c515dd86cd957d2f199d064372ef6817deb7e",
+      "sha256": "a712af8fa74a8992e49972f9b217f268da444bcb062fa91824aee7cd9bbdf5da"
+    },
+    {
+      "file": "safety.js",
+      "commit": "74b77f0b821a93e1910e40f5c29c459c126e6d42",
+      "blob": "e70d5d5a411d1f47e59ee2203a211cb2b7d15df5",
+      "sha256": "ad6f6d57665c23fc87b49c1342e0a88ca32e4f77ceb2bb5377a21c043c177b70"
+    }
+  ],
+  "preservation": {
+    "allPackagingBaseFilesByteIdentical": true,
+    "checkedBaselineFiles": 27,
+    "existingArtifact": "browser-packaging/artifacts/analytics-v1.45deb294b2ecc2a8a1f3bf7067d5822d0676841ab82c36d4c95db08b9bfa821a.js",
+    "existingArtifactSha256": "45deb294b2ecc2a8a1f3bf7067d5822d0676841ab82c36d4c95db08b9bfa821a",
+    "entrySha256": "40cab1b1f9913f25a9ae34bf35b47763dc7a232189e77fbe5f10f32f3b52a8a3",
+    "productionFilesUnchanged": true,
+    "cache": "pheisiraetha-v16",
+    "mainTrackingCommit": "255a5d9d27461dcacaebc1bc80ab322dd54b4de8",
+    "productionNamespaceAddedOrChangedGlobals": 0,
+    "runtimeCoreIoCalls": 0,
+    "deploymentCommandsRun": false
+  },
+  "scope": {
+    "addedFiles": [
+      "browser-packaging/runtime-core/README.md",
+      "browser-packaging/runtime-core/browser-isolation.test.cjs",
+      "browser-packaging/runtime-core/closed-catalog.cjs",
+      "browser-packaging/runtime-core/fixtures.cjs",
+      "browser-packaging/runtime-core/plain-data.cjs",
+      "browser-packaging/runtime-core/presentation-plan.cjs",
+      "browser-packaging/runtime-core/presentation-plan.test.cjs",
+      "browser-packaging/runtime-core/source-snapshot.cjs",
+      "browser-packaging/runtime-core/source-snapshot.test.cjs",
+      "browser-packaging/runtime-core/test-support.cjs",
+      "browser-packaging/runtime-core/verification-results.json",
+      "browser-packaging/runtime-core/verify.cjs"
+    ],
+    "publicBrowserApiAdded": false,
+    "productionCompositionAdded": false,
+    "facadeAdded": false,
+    "runtimeSafetyOrchestrationAdded": false,
+    "formatterAdded": false,
+    "rendererAdded": false
+  },
+  "publicationVerification": "performed separately after the single implementation commit and scoped push"
+}
