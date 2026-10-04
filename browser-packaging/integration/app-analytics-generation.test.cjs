@@ -174,6 +174,7 @@ class TestNode {
   get attributes() { return [...this._attributes].map(([name, value]) => ({ name, value })); }
   get textContent() { return this.nodeType === 3 ? this._data : this.childNodes.map(node => node.textContent).join(''); }
   set textContent(value) {
+    this.ownerDocument._recordMutation('textContent', this, this.childNodes);
     const text = value == null ? '' : String(value);
     if (this.nodeType === 3) this._data = text;
     else { this.replaceChildren(); if (text) this.appendChild(this.ownerDocument._text(text)); }
@@ -193,21 +194,30 @@ class TestNode {
   set dir(value) { this.setAttribute('dir', value); }
   get hidden() { return this.hasAttribute('hidden'); }
   set hidden(value) { if (value) this.setAttribute('hidden', ''); else this.removeAttribute('hidden'); }
-  setAttribute(name, value) { this._attributes.set(String(name), String(value)); }
+  setAttribute(name, value) {
+    this.ownerDocument._recordMutation('setAttribute', this);
+    this._attributes.set(String(name), String(value));
+  }
   getAttribute(name) { return this._attributes.get(String(name)) ?? null; }
   hasAttribute(name) { return this._attributes.has(String(name)); }
-  removeAttribute(name) { this._attributes.delete(String(name)); }
+  removeAttribute(name) {
+    this.ownerDocument._recordMutation('removeAttribute', this);
+    this._attributes.delete(String(name));
+  }
   contains(node) { return this === node || this.childNodes.some(child => child.contains(node)); }
   appendChild(node) {
+    this.ownerDocument._recordMutation('appendChild', this, [node]);
     if (node.nodeType === 11) { for (const child of [...node.childNodes]) this.appendChild(child); return node; }
     node.parentNode?.removeChild(node); this.childNodes.push(node); node.parentNode = this; return node;
   }
   append(...nodes) { for (const node of nodes) this.appendChild(typeof node === 'string' ? this.ownerDocument.createTextNode(node) : node); }
   removeChild(node) {
+    this.ownerDocument._recordMutation('removeChild', this, [node]);
     const index = this.childNodes.indexOf(node); assert.notEqual(index, -1, 'removeChild needs an actual child');
     this.childNodes.splice(index, 1); node.parentNode = null; return node;
   }
   insertBefore(node, reference) {
+    this.ownerDocument._recordMutation('insertBefore', this, [node]);
     if (reference === null) return this.appendChild(node);
     assert.equal(reference.parentNode, this);
     if (node.nodeType === 11) { for (const child of [...node.childNodes]) this.insertBefore(child, reference); return node; }
@@ -215,6 +225,8 @@ class TestNode {
     this.childNodes.splice(this.childNodes.indexOf(reference), 0, node); node.parentNode = this; return node;
   }
   replaceChildren(...nodes) {
+    // Record every attempt before inspecting content, including empty clears.
+    this.ownerDocument._recordMutation('replaceChildren', this, [...this.childNodes, ...nodes]);
     const content = nodes.map(node => typeof node === 'string' ? node : node.textContent).join('');
     this.ownerDocument.commits.push({ host: this, content, connected: this.isConnected, nodes: [...nodes] });
     for (const child of [...this.childNodes]) this.removeChild(child);
@@ -262,6 +274,7 @@ class TestNode {
   focus() { this.ownerDocument.activeElement = this; }
   scrollIntoView() {}
   set innerHTML(html) {
+    this.ownerDocument._recordMutation('innerHTML', this, this.childNodes);
     const fragment = new TestNode(this.ownerDocument, 11, '#document-fragment'), stack = [fragment];
     const voids = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr']);
     for (const token of String(html).match(/<!--[\s\S]*?-->|<[^>]+>|[^<]+/g) || []) {
@@ -282,6 +295,7 @@ class TestNode {
 
 class TestDocument {
   constructor() {
+    this.mutations = [];
     this.commits = []; this.textWrites = []; this.created = []; this.onText = null; this.faultErrors = [];
     this.documentElement = new TestNode(this, 1, 'html'); this.body = new TestNode(this, 1, 'body');
     this.documentElement.appendChild(this.body);
@@ -291,6 +305,14 @@ class TestDocument {
   createDocumentFragment() { const node = new TestNode(this, 11, '#document-fragment'); this.created.push(node); return node; }
   _text(text) { const node = new TestNode(this, 3, '#text'); node._data = String(text); this.created.push(node); return node; }
   createTextNode(text) { const node = this._text(text); this._wroteText(node, String(text)); return node; }
+  _recordMutation(operation, target, related = []) {
+    // Preserve affected identities before removal/reparenting. Ancestor clears
+    // and moves are observable even if identical nodes are later restored.
+    const affected = [target];
+    for (const node of related)
+      if (node instanceof TestNode) affected.push(node, ...descendants(node));
+    this.mutations.push({ operation, target, affected });
+  }
   _wroteText(node, text) {
     this.textWrites.push({ node, text, connected: node.isConnected });
     const hook = this.onText;
@@ -428,6 +450,33 @@ function commitsSince(h, start, host) {
   return h.document.commits.slice(start).filter(commit => commit.host === host && commit.content !== '');
 }
 
+function captureMountedSubtree(h) {
+  const host = h.host(); assert.ok(host?.isConnected, 'Capture the completed current Home mount');
+  const subtree = descendants(host);
+  return { host, children: [...host.childNodes], subtree, text: host.textContent,
+    nodes: new Set([host, ...subtree]), mutationPosition: h.document.mutations.length,
+    commitPosition: h.document.commits.length };
+}
+
+function assertMountedSubtreeUntouched(h, captured) {
+  assert.equal(h.host(), captured.host, 'Stale work must preserve the exact current host');
+  function sameNodes(actual, expected, message) {
+    assert.equal(actual.length, expected.length, message);
+    expected.forEach((node, index) => assert.equal(actual[index], node, `${message}: node ${index}`));
+  }
+  sameNodes(captured.host.childNodes, captured.children, 'Exact current child-node identities/order');
+  sameNodes(descendants(captured.host), captured.subtree, 'Exact current descendant identities/order');
+  assert.equal(captured.host.textContent, captured.text, 'Exact current analytical text remains unchanged');
+  const mutations = h.document.mutations.slice(captured.mutationPosition)
+    .filter(entry => entry.affected.some(node => captured.nodes.has(node)));
+  assert.deepEqual(mutations.map(entry => entry.operation), [],
+    'Stale work cannot mutate, clear, move or restore any current host/subtree node');
+  // Do not use commitsSince(): an empty replaceChildren() is also forbidden here.
+  const attempts = h.document.commits.slice(captured.commitPosition)
+    .filter(entry => captured.nodes.has(entry.host));
+  assert.equal(attempts.length, 0, 'Zero current-subtree replaceChildren attempts, including empty clears');
+}
+
 for (const [verdict, key] of [['HOLD', 'hold'], ['UNKNOWN', 'unknown']]) {
   test(`ALLOW -> ${verdict}: actual fallback replaces the whole bundle and never restores old ALLOW`, () => {
     const h = appHarness(), oldHost = h.host(), oldNodes = descendants(oldHost);
@@ -492,6 +541,9 @@ for (const id of ['replacementAnalyticsHost', 'analyticsHost']) {
     });
     h.render();
     assert.equal(observed, true); assert.notEqual(replacement, rejected.host);
+    assert.equal(h.document.textWrites.slice(rejected.writesAtEntry)
+      .some(write => h.data.allow.components.some(component => component.text === write.text)), false,
+    'First host-identity gate rejects before constructing any analytical component');
     assert.equal(replacement.textContent, ''); assert.equal(rejected.host.textContent, '');
     assert.deepEqual(commitsSince(h, start, rejected.host), []);
     assert.deepEqual(commitsSince(h, start, replacement), []);
@@ -501,15 +553,17 @@ for (const id of ['replacementAnalyticsHost', 'analyticsHost']) {
 
 test('navigation away/back during private delivery keeps the new Home generation and discards old ALLOW', () => {
   const h = appHarness(), oldNodes = descendants(h.host()), start = h.document.commits.length;
-  let stale, current, observed = false;
+  let stale, current, captured, observed = false;
   h.deferNextDelivery((call, resume) => {
     observed = true; stale = call;
     h.navigate('history'); assert.equal(h.host(), null); assert.equal(h.calls.length, 2);
     h.next(h.data.newer); h.navigate('home'); current = h.host(); assertMounted(h, h.data.newer);
+    captured = captureMountedSubtree(h);
     return resume();
   });
   h.render();
   assert.equal(observed, true); assert.notEqual(current, stale.host); assert.equal(h.host(), current);
+  assertMountedSubtreeUntouched(h, captured);
   assert.ok(h.generation() > stale.generation); assertMounted(h, h.data.newer);
   assert.deepEqual(commitsSince(h, start, stale.host), []); assertNoOldNodes(h, oldNodes);
   assert.equal(h.calls.length, 3); assertOneEvaluationPerGeneration(h);
@@ -517,14 +571,15 @@ test('navigation away/back during private delivery keeps the new Home generation
 
 test('locale rerender owns a fresh host and rejects a late older delivery without changing committed input', () => {
   const h = appHarness(), oldNodes = descendants(h.host()), start = h.document.commits.length;
-  let stale, current, observed = false;
+  let stale, current, captured, observed = false;
   h.deferNextDelivery((call, resume) => {
     observed = true; stale = call; h.next(h.data.newer); h.locale('de'); current = h.host();
-    assertMounted(h, h.data.newer); return resume();
+    assertMounted(h, h.data.newer); captured = captureMountedSubtree(h); return resume();
   });
   h.render();
   assert.equal(observed, true); assert.equal(h.document.documentElement.lang, 'de');
   assert.equal(h.host(), current); assert.notEqual(current, stale.host); assertMounted(h, h.data.newer);
+  assertMountedSubtreeUntouched(h, captured);
   assert.deepEqual(commitsSince(h, start, stale.host), []); assertNoOldNodes(h, oldNodes);
   assert.equal(h.storage.get(LANGUAGE_KEY), 'de'); assert.equal(h.storage.get(STORAGE_KEY), JSON.stringify(h.data.input));
   assert.equal(h.calls.length, 3); assertOneEvaluationPerGeneration(h);
@@ -564,7 +619,7 @@ test('second gate rejects a same-id host replacement after construction has star
 
 test('a detached stale subtree is discarded without clearing or restoring over the newer Home subtree', () => {
   const h = appHarness(), oldNodes = descendants(h.host()), start = h.document.commits.length;
-  let staged, staleHost, currentHost, stagedNodes, observed = false;
+  let staged, staleHost, currentHost, stagedNodes, captured, observed = false;
   h.duringDetachedText(h.data.allow.components.at(-1).text, node => {
     observed = true; staged = node; staleHost = h.host();
     assert.equal(node.isConnected, false);
@@ -574,9 +629,11 @@ test('a detached stale subtree is discarded without clearing or restoring over t
     assert.equal(stagedNodes.length, h.data.allow.components.length, 'Observe every required detached component');
     h.navigate('history'); h.next(h.data.newer); h.navigate('home'); currentHost = h.host();
     assertMounted(h, h.data.newer);
+    captured = captureMountedSubtree(h);
   });
   h.render();
   assert.equal(observed, true); assert.equal(staged.isConnected, false); assert.equal(h.host(), currentHost);
+  assertMountedSubtreeUntouched(h, captured);
   for (const node of stagedNodes) assert.equal(node.isConnected, false, 'Every stale component stays discarded');
   assert.notEqual(staleHost, currentHost); assertMounted(h, h.data.newer);
   assert.deepEqual(commitsSince(h, start, staleHost), []); assertNoOldNodes(h, oldNodes);
@@ -595,13 +652,26 @@ for (const failure of ['UNAVAILABLE', 'throw']) {
   });
 }
 
-test('each eligible render generation evaluates exactly once; away navigation evaluates zero times', () => {
+test('eligible Home renders evaluate once; History/Data/RIS/Wizard stay ineligible, including RIS/Wizard rerenders', () => {
   const h = appHarness();
   h.navigate('history'); assert.equal(h.host(), null); assert.equal(h.calls.length, 1);
   h.navigate('data'); assert.equal(h.host(), null); assert.equal(h.calls.length, 1);
   h.navigate('home'); assertMounted(h, h.data.allow); assert.equal(h.calls.length, 2);
-  h.locale('de'); assertMounted(h, h.data.allow); assert.equal(h.calls.length, 3);
-  h.render(); assertMounted(h, h.data.allow); assert.equal(h.calls.length, 4);
+
+  h.click('#editGoal');
+  assert.ok(h.document.querySelector('#risCancel'), 'The production RIS form really opened');
+  assert.equal(h.host(), null); assert.equal(h.calls.length, 2);
+  h.render(); assert.equal(h.host(), null); assert.equal(h.calls.length, 2);
+  h.click('#risCancel'); assertMounted(h, h.data.allow); assert.equal(h.calls.length, 3);
+
+  h.click('#startCheckin');
+  assert.ok(h.document.querySelector('#wizCancel'), 'The production check-in Wizard really opened');
+  assert.equal(h.host(), null); assert.equal(h.calls.length, 3);
+  h.render(); assert.equal(h.host(), null); assert.equal(h.calls.length, 3);
+  h.click('#wizCancel'); assertMounted(h, h.data.allow); assert.equal(h.calls.length, 4);
+
+  h.locale('de'); assertMounted(h, h.data.allow); assert.equal(h.calls.length, 5);
+  h.render(); assertMounted(h, h.data.allow); assert.equal(h.calls.length, 6);
   assertOneEvaluationPerGeneration(h);
   for (let index = 1; index < h.calls.length; index++)
     assert.ok(h.calls[index].generation > h.calls[index - 1].generation, 'New render authority is strictly newer');
