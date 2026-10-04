@@ -128,4 +128,85 @@ async function verify() {
   console.log(JSON.stringify({ focusedTests: report.focusedTests.passed, browserParity: report.browserParity.passed,
     formatterBodies: 30, artifactSha256: manifest.output.sha256, reproducibility: report.reproducibility, scope: branchScope }, null, 2));
 }
-verify().catch(error => { console.error(error); process.exitCode = 1; });
+
+const AGGREGATION_BASE = '26d6685cdfd94a68befdb8eff54431bf92bc8b8f';
+const AGGREGATION_TESTS = Object.freeze([
+  'runtime-core/source-snapshot.test.cjs',
+  'runtime-core/presentation-plan.test.cjs',
+  'runtime-core/browser-isolation.test.cjs',
+  'runtime-facade/runtime.test.cjs',
+  'runtime-facade/formatter.test.cjs',
+  'runtime-facade/browser.test.cjs',
+  'runtime-facade/safety-plan-boundary.integration.test.cjs',
+  'runtime-facade/state-data.test.cjs',
+  'runtime-facade/browser-package-gap.test.cjs',
+  'integration/app-state-baseline.test.cjs'
+]);
+const AGGREGATION_ADDITIONS = Object.freeze(AGGREGATION_TESTS.slice(6).map(file => `browser-packaging/${file}`));
+const AGGREGATION_VERIFIER = 'browser-packaging/verify.cjs';
+
+function aggregationScope() {
+  const head = build.git('rev-parse', 'HEAD').toString().trim();
+  build.git('merge-base', '--is-ancestor', AGGREGATION_BASE, head);
+  const tree = ref => new Map(build.git('ls-tree', '-r', '-z', ref).toString().split('\0').filter(Boolean).map(entry => {
+    const separator = entry.indexOf('\t');
+    const [mode, type, blob] = entry.slice(0, separator).split(' ');
+    return [entry.slice(separator + 1), { mode, type, blob }];
+  }));
+  const baseline = tree(AGGREGATION_BASE), current = tree(head);
+  const allowed = new Set([AGGREGATION_VERIFIER, ...AGGREGATION_ADDITIONS]);
+  for (const [file, identity] of baseline) {
+    assert.ok(current.has(file), `${file}: baseline file removed`);
+    if (file === AGGREGATION_VERIFIER) {
+      assert.equal(current.get(file).mode, identity.mode);
+      assert.equal(current.get(file).type, identity.type);
+    } else assert.deepEqual(current.get(file), identity, `${file}: committed baseline identity changed`);
+  }
+  for (const [file, identity] of current) {
+    if (!baseline.has(file)) assert.ok(AGGREGATION_ADDITIONS.includes(file), `${file}: unexpected committed addition`);
+    if (allowed.has(file)) assert.deepEqual({ mode: identity.mode, type: identity.type },
+      { mode: '100644', type: 'blob' }, `${file}: expected regular non-executable file`);
+    const local = path.join(build.ROOT, file), stat = fs.lstatSync(local);
+    assert.ok(stat.isFile(), `${file}: expected regular worktree file`);
+    assert.equal(Boolean(stat.mode & 0o111), identity.mode === '100755', `${file}: worktree executable mode changed`);
+    if (file !== AGGREGATION_VERIFIER) assert.deepEqual(fs.readFileSync(local), build.git('show', `${head}:${file}`),
+      `${file}: worktree bytes differ from the scoped commit`);
+  }
+  for (const file of AGGREGATION_TESTS) {
+    const relative = `browser-packaging/${file}`;
+    assert.ok(current.has(relative), `${relative}: required test is not committed`);
+    assert.ok(fs.lstatSync(path.join(__dirname, file)).isFile(), `${relative}: required test is missing`);
+  }
+  const untracked = build.git('ls-files', '--others', '--exclude-standard', '-z').toString().split('\0').filter(Boolean);
+  assert.ok(untracked.every(file => allowed.has(file)), `out-of-scope untracked paths: ${untracked.filter(file => !allowed.has(file))}`);
+  return { baseCommit: AGGREGATION_BASE, headCommit: head, allowedChanges: [...allowed] };
+}
+
+async function verifyAggregationTestsOnly() {
+  // Full focused suites, without name filters or exclusions. Their private test
+  // instrumentation remains owned by the tests; this route never rebuilds the
+  // production artifact, runs cleanInstall/scope, or writes historical evidence.
+  const before = aggregationScope();
+  const suites = AGGREGATION_TESTS.map(file => {
+    const output = execFileSync(process.execPath, ['--test', '--test-reporter=tap', path.join(__dirname, file)],
+      { cwd: build.ROOT, encoding: 'utf8', timeout: 30000, maxBuffer: 4 * 1024 * 1024 });
+    const count = name => {
+      const matches = [...output.matchAll(new RegExp(`^# ${name} (\\d+)$`, 'gm'))];
+      assert.equal(matches.length, 1, `${file}: one ${name} summary required`);
+      const value = Number(matches[0][1]);
+      assert.ok(Number.isSafeInteger(value), `${file}: invalid ${name} summary`);
+      return value;
+    };
+    const tests = count('tests'), passed = count('pass');
+    assert.ok(tests > 0, `${file}: no tests executed`);
+    for (const name of ['fail', 'cancelled', 'skipped', 'todo']) assert.equal(count(name), 0, `${file}: ${name} tests`);
+    assert.equal(passed, tests, `${file}: every selected test must pass`);
+    return { file: `browser-packaging/${file}`, passed, failed: 0 };
+  });
+  const after = aggregationScope();
+  assert.deepEqual(after, before, 'aggregation scope changed during focused tests');
+  console.log(JSON.stringify({ phase: '2B-3B-3', route: 'tests-only', scope: after,
+    focusedTests: { passed: suites.reduce((total, suite) => total + suite.passed, 0), failed: 0, suites } }, null, 2));
+}
+(process.argv.includes('--tests-only') ? verifyAggregationTestsOnly : verify)
+  ().catch(error => { console.error(error); process.exitCode = 1; });
