@@ -156,6 +156,9 @@ class Node {
     return out;
   }
   querySelector(selector) { return this.querySelectorAll(selector)[0] ?? null; }
+  matches(selector) {
+    return matchesSimple(this, selector, this);
+  }
   closest(selector) { for (let node = this; node; node = node.parentElement) if (matchesSimple(node, selector, node)) return node; return null; }
   addEventListener(type, callback) { const callbacks = this.listeners.get(type) ?? []; callbacks.push(callback); this.listeners.set(type, callbacks); }
   dispatch(type, extra = {}) {
@@ -206,6 +209,14 @@ function matchesChain(node, selector, scope) {
   }
   return parts.length > 0 && at(node, parts.length - 1);
 }
+
+test('private DOM matches requires both notice classes', () => {
+  const notice = new Node(null, 'div');
+  notice.className = 'notice smalltext';
+  assert.equal(notice.matches('.notice.smalltext'), true);
+  notice.className = 'notice';
+  assert.equal(notice.matches('.notice.smalltext'), false);
+});
 
 function instrument(source, wired) {
   if (wired) {
