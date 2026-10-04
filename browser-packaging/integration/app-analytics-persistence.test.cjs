@@ -4,7 +4,8 @@
 // Reuse the baseline suite's private VM + real artifact pattern and its fixture
 // writer. Do not import another test suite (which would register extra tests).
 // Only the static flag and a private observation bridge change in-memory app
-// text. Save/import/reset/render functions and the frozen artifact stay intact.
+// text. Save/import/reset/render functions and the frozen evaluator stay intact;
+// a private entry Proxy counts calls and forwards them to that real evaluator.
 // The only injected failure is localStorage.setItem for the existing state key.
 // This shard is syntax-checked only until aggregation with S1.
 const test = require('node:test');
@@ -22,7 +23,9 @@ const STORAGE_KEY = 'pheisiraetha_v01';
 const LANGUAGE_KEY = 'pheisiraetha_language_v01';
 const ONBOARDING_KEY = 'pheisiraetha_onboarding_v01';
 const STORAGE_KEYS = [STORAGE_KEY, LANGUAGE_KEY, ONBOARDING_KEY].sort();
+const STORAGE_API_PROPERTIES = new Set(['getItem', 'setItem', 'removeItem', 'clear']);
 const PRIVATE_API = '__APP_ANALYTICS_PERSISTENCE_TEST_ONLY__';
+const PRIVATE_EVALUATION = '__APP_ANALYTICS_EVALUATION_TEST_ONLY__';
 const APP_SOURCE = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
 const BASE_SOURCE = execFileSync('git', ['show', `${BASE}:app.js`], { cwd: ROOT, encoding: 'utf8' });
 const LOCALES_SOURCE = fs.readFileSync(path.join(ROOT, 'locales.js'), 'utf8');
@@ -106,6 +109,7 @@ class Node {
     node.remove();
     node.parentNode = this;
     this.childNodes.push(node);
+    this.ownerDocument.observeInsertion(node);
     return node;
   }
   append(...nodes) { nodes.forEach(node => this.appendChild(typeof node === 'string' ? this.ownerDocument.createTextNode(node) : node)); }
@@ -115,6 +119,7 @@ class Node {
     node.remove();
     node.parentNode = this;
     this.childNodes.splice(this.childNodes.indexOf(reference), 0, node);
+    this.ownerDocument.observeInsertion(node);
     return node;
   }
   before(node) { this.parentNode.insertBefore(node, this); }
@@ -221,11 +226,52 @@ function instrument(source, wired) {
 })();`);
 }
 
+function countedArtifactSource() {
+  const source = artifact.toString('utf8'), entry = 'var { evaluate } = require_runtime();';
+  assert.equal(source.split(entry).length - 1, 1, 'Observe only the real facade entry, not the evaluator or S1 hooks');
+  return source.replace(entry, `var { evaluate: realEvaluate } = require_runtime();
+      var evaluate = new Proxy(realEvaluate, {
+        apply(target, receiver, args) {
+          globalThis.${PRIVATE_EVALUATION}();
+          return Reflect.apply(target, receiver, args);
+        }
+      });`);
+}
+
+function monitoredStorage(methods, namedAccesses) {
+  const target = Object.freeze(Object.assign(Object.create(null), methods));
+  function unexpected(operation, key) {
+    namedAccesses.push([operation, String(key)]);
+    throw new Error(`Unexpected named localStorage ${operation}: ${String(key)}`);
+  }
+  return new Proxy(target, {
+    get(target, key, receiver) {
+      if (!STORAGE_API_PROPERTIES.has(key)) return unexpected('get', key);
+      return Reflect.get(target, key, receiver);
+    },
+    set(_target, key) { return unexpected('set', key); },
+    defineProperty(_target, key) { return unexpected('define', key); },
+    deleteProperty(_target, key) { return unexpected('delete', key); }
+  });
+}
+function assertStorageChannels({ accesses, namedAccesses }) {
+  assert.deepEqual(namedAccesses, [], 'No named-property storage get/set/define/delete channel, even if production catches its exception');
+  for (const [operation, key] of accesses) {
+    assert.ok(['getItem', 'setItem', 'removeItem'].includes(operation));
+    assert.ok(STORAGE_KEYS.includes(key), `No fourth key may be read or written: ${key}`);
+  }
+}
+const storageAudits = [];
+test.afterEach(() => {
+  for (const audit of storageAudits.splice(0)) assertStorageChannels(audit);
+});
+
 function harness(initial = fixture(), { baseline = false } = {}) {
   const entries = new Map([[STORAGE_KEY, JSON.stringify(initial)], [LANGUAGE_KEY, 'en'], [ONBOARDING_KEY, '1']]);
   const initialBytes = entries.get(STORAGE_KEY);
-  const accesses = [], attempts = [], writes = [], writeProbes = [], alerts = [], timers = [], downloads = [], forbidden = [];
-  let api, fault = false, uid = 0, timerId = 0;
+  const accesses = [], namedAccesses = [], attempts = [], writes = [], writeProbes = [], alerts = [], timers = [], downloads = [], forbidden = [];
+  storageAudits.push({ accesses, namedAccesses });
+  let api, fault = false, uid = 0, timerId = 0, evaluationCount = 0, analyticsMountCount = 0;
   const storageError = new Error('TEST_ONLY_STATE_STORAGE_FAILURE');
   const document = {
     activeElement: null,
@@ -235,6 +281,9 @@ function harness(initial = fixture(), { baseline = false } = {}) {
     querySelector(selector) { return this.documentElement.querySelector(selector); },
     querySelectorAll(selector) { return this.documentElement.querySelectorAll(selector); },
     getElementById(id) { return this.querySelector('#' + id); },
+    observeInsertion(node) {
+      if (node.isConnected && (node.closest('#analyticsHost') || node.querySelector('#analyticsHost'))) analyticsMountCount++;
+    },
     addEventListener() {},
     download(anchor) { assert.ok(blobs.has(anchor.href), 'Real export must use its production Blob URL'); downloads.push(blobs.get(anchor.href)); }
   };
@@ -245,7 +294,7 @@ function harness(initial = fixture(), { baseline = false } = {}) {
   root.id = 'app';
   document.body.appendChild(root);
   const bodies = () => document.getElementById('analyticsHost')?.textContent.trim() ?? '';
-  const storage = {
+  const storage = monitoredStorage({
     getItem(key) { accesses.push(['getItem', key]); return entries.get(key) ?? null; },
     setItem(key, value) {
       accesses.push(['setItem', key]);
@@ -258,7 +307,7 @@ function harness(initial = fixture(), { baseline = false } = {}) {
     },
     removeItem(key) { accesses.push(['removeItem', key]); attempts.push(['removeItem', key, 'succeeded']); writes.push(['removeItem', key]); entries.delete(key); },
     clear() { accesses.push(['clear']); throw new Error('Unexpected storage.clear in S4'); }
-  };
+  }, namedAccesses);
   const blobs = new Map();
   const fixedTime = '2026-10-04T12:00:00.000Z';
   class FixtureDate extends Date {
@@ -267,6 +316,7 @@ function harness(initial = fixture(), { baseline = false } = {}) {
   }
   const sandbox = {
     document, localStorage: storage, navigator: { languages: ['en'], language: 'en' }, location: { protocol: 'file:' },
+    [PRIVATE_EVALUATION]: () => { evaluationCount++; },
     Date: FixtureDate, crypto: { randomUUID: () => `synthetic-persistence-id-${++uid}` }, AbortController, Blob,
     URL: { createObjectURL(blob) { const url = `blob:synthetic-${blobs.size}`; blobs.set(url, blob); return url; }, revokeObjectURL(url) { blobs.delete(url); } },
     alert: message => alerts.push(message), confirm: () => true,
@@ -279,7 +329,7 @@ function harness(initial = fixture(), { baseline = false } = {}) {
   const context = vm.createContext(sandbox, { codeGeneration: { strings: false, wasm: false } });
   const run = source => vm.runInContext(source, context, { timeout: 10000 });
   run(LOCALES_SOURCE);
-  if (!baseline) run(artifact.toString('utf8')); // Actual frozen facade, never a replacement evaluator.
+  if (!baseline) run(countedArtifactSource()); // Count and forward every call to the actual frozen evaluator.
   run(instrument(baseline ? BASE_SOURCE : APP_SOURCE, !baseline));
   api = context[PRIVATE_API];
   assert.ok(api, 'Observation bridge is private to this VM');
@@ -287,8 +337,8 @@ function harness(initial = fixture(), { baseline = false } = {}) {
   assert.deepEqual(forbidden, []);
   function element(selector) { const node = document.querySelector(selector); assert.ok(node, `Production control ${selector} must exist`); return node; }
   const app = {
-    api, context, document, root, initialBytes, accesses, attempts, writes, writeProbes, alerts, timers, downloads, forbidden, storageError,
-    bodies, element,
+    api, context, document, root, initialBytes, accesses, namedAccesses, attempts, writes, writeProbes, alerts, timers, downloads, forbidden, storageError,
+    bodies, element, evaluations: () => evaluationCount, analyticsMounts: () => analyticsMountCount,
     armFault() { fault = true; }, disarmFault() { fault = false; },
     stored(key = STORAGE_KEY) { return entries.get(key) ?? null; },
     keys() { return [...entries.keys()].sort(); },
@@ -419,21 +469,40 @@ for (const scenario of failureCases) test(scenario.name, async () => {
 
 test('rejected import', async () => {
   const wrongRating = fixture(); wrongRating.intent.cycles[0].iep.desire = '7';
-  for (const raw of ['{"version":', JSON.stringify(wrongRating)]) {
+  for (const failedFirst of [false, true]) for (const raw of ['{"version":', JSON.stringify(wrongRating)]) {
     const app = harness();
+    assert.ok(app.evaluations() > 0, 'Initial authoritative Home really evaluates before any private positive-control call');
     assertApprovedHome(app);
-    const state = app.api.readState(), before = plain(state);
+    assert.ok(app.analyticsMounts() > 0, 'Private DOM observer sees the real initial approved mount');
+    if (failedFirst) {
+      await fail(app, failureCases[1]); // Real RIS edit mutation and production persist failure, never a latch write.
+      assertFailedAuthority(app);
+    }
     app.navigate('data');
     app.armFault();
+    const state = app.api.readState(), before = plain(state), storedBefore = app.stored();
+    const attemptsBefore = plain(app.attempts), attemptCount = app.attempts.length, evaluationsBefore = app.evaluations();
+    const mountsBefore = app.analyticsMounts();
     await app.importRaw(raw);
     assert.equal(app.api.readState(), state);
     assert.deepEqual(plain(state), before);
-    assert.equal(app.api.readAuthority(), true, 'Rejecting input must not revoke the existing committed state authority');
-    assert.equal(app.stored(), app.initialBytes);
-    assert.deepEqual(app.attempts, [], 'Rejected input never reaches persist');
+    assert.equal(app.api.readAuthority(), !failedFirst, 'Rejected input preserves both true -> true and false -> false authority');
+    assert.equal(app.stored(), storedBefore, 'Rejected input preserves exact stored bytes');
+    assert.equal(app.attempts.length, attemptCount, 'Rejected input never adds a persistence attempt');
+    assert.deepEqual(app.attempts, attemptsBefore);
     assert.deepEqual(app.alerts, [app.messages.importError]);
     app.navigate('home');
-    assertApprovedHome(app);
+    if (failedFirst) {
+      assert.equal(app.api.readAuthority(), false, 'Rejected import and Home navigation cannot restore a previous ALLOW');
+      assert.equal(app.evaluations(), evaluationsBefore, 'Rejected import and Home navigation perform zero analytics evaluation');
+      assert.equal(app.analyticsMounts(), mountsBefore, 'No analytics mount, including a transient restored ALLOW that is subsequently removed');
+      assert.equal(app.document.getElementById('analyticsHost'), null, 'Home cannot mount analytics while authority remains false');
+      assertNoBodies(app);
+    } else assertApprovedHome(app);
+    assert.equal(app.api.readState(), state);
+    assert.deepEqual(plain(state), before);
+    assert.equal(app.stored(), storedBefore);
+    assert.deepEqual(app.attempts, attemptsBefore);
   }
 });
 
@@ -592,6 +661,24 @@ test('no analytics storage/export fields', async () => {
 });
 
 test('no fourth storage key', async () => {
+  // Guard positive controls are isolated from application storage: all named
+  // channels must be recorded before throwing, not merely hidden from the Map.
+  const namedProbe = [], probe = monitoredStorage({}, namedProbe);
+  const alternateChannels = [
+    ['get', 'analytics', () => probe.analytics],
+    ['set', 'analytics', () => { probe.analytics = 'synthetic'; }],
+    ['set', 'analytics', () => { probe['analytics'] = 'synthetic'; }],
+    ['define', 'analytics', () => Object.defineProperty(probe, 'analytics', { value: 'synthetic' })],
+    ['delete', 'analytics', () => { delete probe.analytics; }],
+    ...['generation', 'DTO', 'authority'].flatMap(key => [
+      ['get', key, () => probe[key]],
+      ['set', key, () => { probe[key] = 'synthetic'; }],
+      ['define', key, () => Object.defineProperty(probe, key, { value: 'synthetic' })],
+      ['delete', key, () => { delete probe[key]; }]
+    ])
+  ];
+  for (const [, , attempt] of alternateChannels) assert.throws(attempt, /Unexpected named localStorage/);
+  assert.deepEqual(namedProbe, alternateChannels.map(([operation, key]) => [operation, key]));
   const app = harness();
   assertApprovedHome(app);
   await fail(app, failureCases[1]);
@@ -611,9 +698,6 @@ test('no fourth storage key', async () => {
   assert.ok(app.accesses.some(([operation]) => operation === 'getItem'));
   assert.ok(app.accesses.some(([operation]) => operation === 'setItem'));
   assert.ok(app.accesses.some(([operation]) => operation === 'removeItem'));
-  for (const [operation, key] of app.accesses) {
-    assert.ok(['getItem', 'setItem', 'removeItem'].includes(operation));
-    assert.ok(STORAGE_KEYS.includes(key), `No fourth key may be read or written: ${key}`);
-  }
+  assertStorageChannels(app); // Both method-key and named-property paths.
   assert.deepEqual(app.forbidden, [], 'No alternate storage or loading path');
 });
