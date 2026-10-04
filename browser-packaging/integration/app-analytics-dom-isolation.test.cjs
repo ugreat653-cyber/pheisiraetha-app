@@ -35,6 +35,19 @@ const ONBOARDING_KEY = 'pheisiraetha_onboarding_v01';
 const TAIL = '\n  render();\n\n})();';
 const ENTRY = 'var { evaluate } = require_runtime();';
 const LABELS = Array(10).fill('Calm / contentment');
+// S1 structural contract, app.js at 602ac740a1c1ff625c4f1178580d881d5833a19c:
+// render() owns the host ID; buildAnalyticsSubtree() uses only the card class.
+// Never derive this allowlist from the current app, DTOs or source identifiers.
+const STRUCTURAL_TOKENS = Object.freeze({
+  id: Object.freeze(['analyticsHost']),
+  class: Object.freeze(['card'])
+});
+const REFLECTED_DOM_PROPERTIES = Object.freeze({
+  role: 'role', inert: 'inert',
+  ariaLabel: 'aria-label', ariaHidden: 'aria-hidden',
+  ariaDescription: 'aria-description', ariaDescribedBy: 'aria-describedby',
+  ariaLabelledBy: 'aria-labelledby'
+});
 const RAW = Object.freeze({
   interpretation: '__S5_RAW_INTERPRETATION_73c4__',
   nextFocus: '__S5_RAW_NEXT_FOCUS_82e5__',
@@ -313,6 +326,22 @@ class DomNode {
   scrollIntoView() {}
 }
 Object.assign(DomNode, { ELEMENT_NODE: 1, TEXT_NODE: 3, COMMENT_NODE: 8, DOCUMENT_NODE: 9, DOCUMENT_FRAGMENT_NODE: 11 });
+// Native-style reflection funnels property writes through the same observable
+// attribute APIs as direct writes, including removal of nullable ARIA values.
+for (const [property, attribute] of Object.entries(REFLECTED_DOM_PROPERTIES)) {
+  Object.defineProperty(DomNode.prototype, property, {
+    get() {
+      if (property === 'inert') return this.hasAttribute(attribute);
+      return this.getAttribute(attribute) ?? (property === 'role' ? '' : null);
+    },
+    set(value) {
+      if (property === 'inert') {
+        if (value) this.setAttribute(attribute, ''); else this.removeAttribute(attribute);
+      } else if (property !== 'role' && value == null) this.removeAttribute(attribute);
+      else this.setAttribute(attribute, value);
+    }
+  });
+}
 
 function parseHTML(document, html) {
   const fragment = new DomNode(document, 11);
@@ -461,8 +490,11 @@ class DomDocument extends DomNode {
   record(kind, target) {
     if (!this.events) return;
     const host = this.getElementById('analyticsHost');
+    // Detached construction and attributes removed before commit are part of
+    // the history too; retain the node identity for the scoped structural oracle.
+    const attributeNodes = new Set([...elements(this), ...elements(target)]);
     this.events.push({ kind, target, host, texts: host ? bodyTexts(host) : [],
-      attributes: elements(this).flatMap(node => node.attributes.map(attribute => ({ ...attribute }))),
+      attributes: [...attributeNodes].flatMap(node => node.attributes.map(attribute => ({ ...attribute, node }))),
       comments: walk(this).filter(node => node.nodeType === 8).map(node => node.data),
       surfaces: walk(this).flatMap(node => [node.nodeType === 3 || node.nodeType === 8 ? node.data : '',
         ...node.attributes.flatMap(attribute => [attribute.name, attribute.value])]),
@@ -609,6 +641,64 @@ function attributeHistory(app) {
   return [...elements(app.document).flatMap(node => node.attributes),
     ...app.document.events.flatMap(event => event.attributes)];
 }
+function assertNoAccessibilityProse(app) {
+  for (const node of elements(app.host()))
+    assert.deepEqual(node.attributes.filter(attribute => attribute.name.startsWith('aria-')), [],
+      'Minimal analytical subtree adds no independent accessibility prose');
+  for (const attribute of attributeHistory(app))
+    if (attribute.name.startsWith('aria-') || attribute.name === 'role')
+      for (const component of app.dto.components)
+        assert.equal(attribute.value.includes(component.text), false, 'Accessibility prose in ' + attribute.name);
+}
+function assertNoHiddenCopy(app) {
+  const host = app.host();
+  for (const node of elements(host)) {
+    assert.equal(node.hasAttribute('hidden') || node.hasAttribute('inert') || node.getAttribute('aria-hidden') === 'true', false,
+      'Hidden/inert/aria-hidden analytical node');
+    assert.equal(/(?:^|\s)(?:hidden|sr-only|sr_only|srOnly|visually-hidden|visuallyHidden|screen-reader-only)(?:\s|$)/i.test(node.className), false);
+    const style = node.getAttribute('style') || '';
+    assert.equal(/display\s*:\s*none|visibility\s*:\s*hidden|clip(?:-path)?\s*:|opacity\s*:\s*0(?:[;\s]|$)/i.test(style), false);
+  }
+  const outside = walk(app.document).filter(node => node.nodeType === 3 && !host.contains(node));
+  for (const component of app.dto.components)
+    assert.equal(outside.some(node => node.data.includes(component.text)), false, 'No body copy in a separate hidden/SR node');
+}
+function assertStructuralToken(attribute, token) {
+  assert.ok(STRUCTURAL_TOKENS[attribute].includes(token), 'Unexpected structural ' + attribute + ' token: ' + token);
+}
+function structuralTokens(app, sourceIdentifiers) {
+  const host = app.host(), nodes = elements(host), nodeSet = new Set(nodes);
+  const identifiers = [...sourceIdentifiers, ...app.dto.components.flatMap(component =>
+    [component.componentId, component.slot, component.templateId, component.surface, component.role])];
+  function checkAttribute(attribute) {
+    assert.ok(['id', 'class', 'lang', 'dir'].includes(attribute.name), 'No prose or raw-metadata attribute: ' + attribute.name);
+    if (attribute.name === 'lang') assert.equal(attribute.value, 'en');
+    if (attribute.name === 'dir') assert.equal(attribute.value, 'ltr');
+    if (attribute.name === 'id' || attribute.name === 'class') {
+      const tokens = attribute.name === 'id' ? [attribute.value] : attribute.value.split(/\s+/).filter(Boolean);
+      for (const token of tokens) {
+        assertStructuralToken(attribute.name, token);
+        for (const identifier of identifiers)
+          assert.equal(token.includes(identifier), false, 'Source/DTO identifier in structural token: ' + identifier);
+      }
+    }
+    for (const component of app.dto.components) assert.equal(attribute.value.includes(component.text), false);
+  }
+  const ids = [], classes = [];
+  for (const node of nodes) {
+    assert.ok(['div', 'section', 'article', 'p', 'span'].includes(node.localName), 'Inert fixed structure only');
+    for (const attribute of node.attributes) checkAttribute(attribute);
+    if (node.hasAttribute('id')) ids.push(node.id);
+    classes.push(...node.className.split(/\s+/).filter(Boolean));
+    assert.equal(node.hidden, false);
+    assert.equal(node.title, '');
+  }
+  for (const event of app.document.events)
+    for (const attribute of event.attributes)
+      if (nodeSet.has(attribute.node)) checkAttribute(attribute);
+  assert.equal(new Set(ids).size, ids.length, 'Structural IDs are unique in the analytical subtree');
+  return { id: [...new Set(ids)].sort(), class: [...new Set(classes)].sort() };
+}
 function assertAtomic(app) {
   const expected = app.dto.components.map(component => component.text);
   assert.ok(expected.length > 0);
@@ -729,29 +819,65 @@ test('no analytical title or tooltip prose anywhere in the document', () => {
 
 test('no analytical ARIA prose or accessibility duplicates', () => {
   const app = appHarness();
-  const host = requireMounted(app);
-  for (const node of elements(host))
-    assert.deepEqual(node.attributes.filter(attribute => attribute.name.startsWith('aria-')), [],
-      'Minimal analytical subtree adds no independent accessibility prose');
-  for (const attribute of attributeHistory(app))
-    if (attribute.name.startsWith('aria-'))
-      for (const component of app.dto.components) assert.equal(attribute.value.includes(component.text), false);
+  requireMounted(app);
+  assertNoAccessibilityProse(app);
   assertNoRawLeak(app);
 });
 
 test('no hidden, inert, visually hidden or SR-only analytical copy', () => {
   const app = appHarness();
-  const host = requireMounted(app);
-  for (const node of elements(host)) {
-    assert.equal(node.hasAttribute('hidden') || node.hasAttribute('inert') || node.getAttribute('aria-hidden') === 'true', false);
-    assert.equal(/(?:^|\s)(?:hidden|sr-only|sr_only|srOnly|visually-hidden|visuallyHidden|screen-reader-only)(?:\s|$)/i.test(node.className), false);
-    const style = node.getAttribute('style') || '';
-    assert.equal(/display\s*:\s*none|visibility\s*:\s*hidden|clip(?:-path)?\s*:|opacity\s*:\s*0(?:[;\s]|$)/i.test(style), false);
-  }
-  const outside = walk(app.document).filter(node => node.nodeType === 3 && !host.contains(node));
-  for (const component of app.dto.components)
-    assert.equal(outside.some(node => node.data.includes(component.text)), false, 'No body copy in a separate hidden/SR node');
+  requireMounted(app);
+  assertNoHiddenCopy(app);
   assertNoRawLeak(app);
+});
+
+test('private reflected property controls reach attribute history and the leakage oracles', () => {
+  const mounted = appHarness();
+  requireMounted(mounted);
+  const prose = mounted.dto.components[0].text;
+  function control() {
+    const document = new DomDocument(), host = document.createElement('div');
+    host.id = 'analyticsHost';
+    document.app.appendChild(host);
+    return { document, dto: mounted.dto, host: () => host };
+  }
+  // Independent expectations also catch an incorrect reflection-map spelling.
+  for (const [property, attribute] of [
+    ['role', 'role'], ['ariaLabel', 'aria-label'], ['ariaHidden', 'aria-hidden'],
+    ['ariaDescription', 'aria-description'], ['ariaDescribedBy', 'aria-describedby'],
+    ['ariaLabelledBy', 'aria-labelledby']
+  ]) {
+    const app = control(), node = app.document.createElement('p');
+    node[property] = prose;
+    assert.equal(node.getAttribute(attribute), prose, property + ' reflects the exact attribute name');
+    assert.equal(node[property], prose);
+    if (property === 'role') node.removeAttribute(attribute); else node[property] = null;
+    assert.equal(node.hasAttribute(attribute), false);
+    assert.equal(node[property], property === 'role' ? '' : null);
+    app.host().appendChild(node);
+    assert.ok(attributeHistory(app).some(entry => entry.name === attribute && entry.value === prose),
+      'History retains the detached property write after its attribute is removed: ' + property);
+    assert.ok(app.document.events.some(event => event.kind === 'setAttribute' && event.target === node));
+    assert.ok(app.document.events.some(event => event.kind === 'removeAttribute' && event.target === node));
+    assert.throws(() => assertNoAccessibilityProse(app), /Accessibility prose/, property + ' cannot bypass the existing oracle');
+  }
+  const app = control(), node = app.document.createElement('p');
+  node.inert = true;
+  assert.equal(node.inert, true);
+  assert.equal(node.getAttribute('inert'), '');
+  app.host().appendChild(node);
+  assert.throws(() => assertNoHiddenCopy(app), /Hidden\/inert\/aria-hidden/);
+  node.inert = false;
+  assert.equal(node.inert, false);
+  assert.equal(node.hasAttribute('inert'), false);
+  assert.ok(attributeHistory(app).some(entry => entry.name === 'inert'));
+  assert.ok(app.document.events.some(event => event.kind === 'removeAttribute' && event.target === node));
+  node.ariaHidden = 'true';
+  assert.equal(node.getAttribute('aria-hidden'), 'true');
+  assert.throws(() => assertNoHiddenCopy(app), /Hidden\/inert\/aria-hidden/);
+  node.ariaHidden = null;
+  assert.equal(node.hasAttribute('aria-hidden'), false);
+  assertNoHiddenCopy(app);
 });
 
 test('no analytical data-* payload on the host, descendants or other legacy surfaces', () => {
@@ -869,27 +995,31 @@ for (const point of ['before', 'after']) test('replaceChildren commit exception 
 });
 
 test('only fixed structural IDs/classes and en/ltr attributes accompany approved text', () => {
-  const app = appHarness();
-  const host = requireMounted(app);
-  const ids = [];
-  for (const node of elements(host)) {
-    assert.ok(['div', 'section', 'article', 'p', 'span'].includes(node.localName), 'Inert fixed structure only');
-    for (const attribute of node.attributes) {
-      assert.ok(['id', 'class', 'lang', 'dir'].includes(attribute.name), 'No prose or raw-metadata attribute: ' + attribute.name);
-      if (attribute.name === 'lang') assert.equal(attribute.value, 'en');
-      if (attribute.name === 'dir') assert.equal(attribute.value, 'ltr');
-      if (attribute.name === 'id') {
-        assert.match(attribute.value, /^[A-Za-z_][A-Za-z0-9_.:-]*$/, 'ID is a structural token');
-        ids.push(attribute.value);
-      }
-      if (attribute.name === 'class')
-        for (const token of attribute.value.split(/\s+/).filter(Boolean))
-          assert.match(token, /^[A-Za-z_][A-Za-z0-9_-]*$/, 'Classes are structural tokens');
-      for (const component of app.dto.components) assert.equal(attribute.value.includes(component.text), false);
+  const original = sourceState(), snapshots = [], outputs = [];
+  const metadataKeys = ['sourceId', 'ruleId', 'candidateId', 'templateId', 'componentId', 'slot'];
+  for (const variant of ['Alpha', 'Beta']) {
+    const state = copy(original);
+    state.intent.id = 's5Intent_' + variant;
+    state.intent.cycles.forEach((cycle, index) => { cycle.id = 's5Cycle_' + variant + '_' + index; });
+    const metadata = Object.fromEntries(metadataKeys.map(key => [key, 's5_' + key + '_' + variant]));
+    Object.assign(state.opaque, metadata);
+    const sourceIdentifiers = [state.intent.id, ...state.intent.cycles.map(cycle => cycle.id), ...Object.values(metadata)];
+    const app = appHarness({ state });
+    requireMounted(app);
+    assert.deepEqual(copy(app.api.readState()), state, 'Distinct identifiers really enter the actual mounted-state pipeline');
+    assert.deepEqual(app.dto, oracle(state));
+    outputs.push(app.dto);
+    snapshots.push(structuralTokens(app, sourceIdentifiers));
+    assert.deepEqual(snapshots.at(-1), STRUCTURAL_TOKENS, 'Exactly the frozen S1 ID/class token sets');
+    for (const attribute of ['id', 'class']) {
+      // These sentinels satisfy the old regex. Fixed membership must still reject
+      // them, along with every source and DTO identity tested above.
+      for (const token of ['analyticsUnexpected', ...sourceIdentifiers,
+        ...app.dto.components.flatMap(component => [component.componentId, component.slot, component.templateId])])
+        assert.throws(() => assertStructuralToken(attribute, token), /Unexpected structural/);
     }
-    assert.equal(node.hidden, false);
-    assert.equal(node.title, '');
+    assertNoRawLeak(app);
   }
-  assert.equal(new Set(ids).size, ids.length, 'Structural IDs are unique in the analytical subtree');
-  assertNoRawLeak(app);
+  assert.deepEqual(outputs[0], outputs[1], 'Otherwise equivalent records retain identical canonical analytical output');
+  assert.deepEqual(snapshots[0], snapshots[1], 'Analytics ID/class sets are independent of all varied source identifiers');
 });
