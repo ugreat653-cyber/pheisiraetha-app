@@ -1,230 +1,369 @@
 {
-  "artifactSha256": "45deb294b2ecc2a8a1f3bf7067d5822d0676841ab82c36d4c95db08b9bfa821a",
-  "frozenInputs": "PASS: exact blobs, hashes, bytes unchanged; one shared Analysis module",
-  "reproducibility": "PASS: two fresh staging builds equal recorded artifact byte-for-byte",
-  "cleanInstall": "PASS: fresh checkout, empty npm cache, locked install, identical artifact and manifest",
-  "namespace": "PASS: zero global additions/changes; two loads; no Node globals, raw APIs or test surface",
-  "runtimeIO": "PASS: zero network/DOM/storage accesses; no external imports",
-  "analysisParity": {
-    "passed": 22,
+  "phase": "2B-3B-2B",
+  "branch": "phase2b-analytics-runtime-facade",
+  "requiredSoleParent": "eb24cac88bf82fc9ebc38914a90bc47829a6adcb",
+  "frozenInputs": [
+    {
+      "file": "analysis.js",
+      "commit": "94b112488e576e08495443d93c048a528c39aac7",
+      "blob": "cc6c515dd86cd957d2f199d064372ef6817deb7e",
+      "sha256": "a712af8fa74a8992e49972f9b217f268da444bcb062fa91824aee7cd9bbdf5da"
+    },
+    {
+      "file": "safety.js",
+      "commit": "74b77f0b821a93e1910e40f5c29c459c126e6d42",
+      "blob": "e70d5d5a411d1f47e59ee2203a211cb2b7d15df5",
+      "sha256": "ad6f6d57665c23fc87b49c1342e0a88ca32e4f77ceb2bb5377a21c043c177b70"
+    }
+  ],
+  "frozenInputBytesUnchanged": true,
+  "acceptedCoreBytesUnchanged": true,
+  "SafetyAnalysisResolution": "one exact frozen Analysis module; literal ./analysis.js resolution unchanged",
+  "pipeline": "snapshot -> frozen Analysis -> closed plan -> frozen Safety exactly once -> coherence gate -> presentation-only formatter -> immutable render-only DTO",
+  "canonicalFormatter": {
+    "insightTemplates": 25,
+    "whyTemplates": 4,
+    "fallbackTemplates": 1,
+    "actualSafetyApprovedScenarios": 48,
+    "textOracleRegistryCommit": "ba46070bbcd42af51fb534c3282dd8a350bcfb20",
+    "catalogBodiesDuplicated": false,
+    "numericRendering": "exact non-locale numeric text; negative zero -0; no rounding, percent conversion or recomputation",
+    "listSeparator": ", ",
+    "basisRecordSeparator": "; ",
+    "revisionDimensions": [
+      "primary",
+      "success",
+      "scope",
+      "nonGoals",
+      "constraints",
+      "rationale"
+    ]
+  },
+  "focusedTests": {
+    "passed": 213,
     "failed": 0,
-    "cases": [
+    "suites": [
       {
-        "name": "no intent",
-        "status": "EMPTY",
-        "primary": null,
-        "secondary": null
+        "file": "browser-packaging/runtime-facade/runtime.test.cjs",
+        "passed": 47,
+        "failed": 0,
+        "cases": [
+          "evaluate MF3: exact immutable render-only DTO",
+          "evaluate MF4: exact immutable render-only DTO",
+          "empty primary uses null-manifest request, invokes actual frozen Safety once, and formats its actual fallback",
+          "a new deterministic DTO is constructed for every success, fallback and failure",
+          "caller state changes cannot affect an already returned DTO; DTO mutation cannot affect caller state",
+          "adapter failure undefined: UNAVAILABLE before Analysis or Safety",
+          "adapter failure nonfinite: UNAVAILABLE before Analysis or Safety",
+          "adapter failure executable: UNAVAILABLE before Analysis or Safety",
+          "adapter failure circular: UNAVAILABLE before Analysis or Safety",
+          "adapter accessor fails without invoking the getter",
+          "actual adjacent-only TXT mapping failure returns UNAVAILABLE without Safety or a weaker plan",
+          "private fault at analyze: closed UNAVAILABLE, no retry",
+          "private fault at plan: closed UNAVAILABLE, no retry",
+          "private fault at assess: closed UNAVAILABLE, no retry",
+          "private fault at gate: closed UNAVAILABLE, no retry",
+          "private fault at format: closed UNAVAILABLE, no retry",
+          "DTO construction failure also returns body-free UNAVAILABLE",
+          "a previous successful DTO is never reused after later failure",
+          "malformed/incoherent Safety output safetyVersion: UNAVAILABLE",
+          "malformed/incoherent Safety output registryVersion: UNAVAILABLE",
+          "malformed/incoherent Safety output objectiveMeaning: UNAVAILABLE",
+          "malformed/incoherent Safety output causality: UNAVAILABLE",
+          "malformed/incoherent Safety output persisted: UNAVAILABLE",
+          "malformed/incoherent Safety output engineReference: UNAVAILABLE",
+          "malformed/incoherent Safety output presentation version: UNAVAILABLE",
+          "malformed/incoherent Safety output ALLOW/fallback mismatch: UNAVAILABLE",
+          "malformed/incoherent Safety output ALLOW missing primary: UNAVAILABLE",
+          "malformed/incoherent Safety output ALLOW fallback present: UNAVAILABLE",
+          "malformed/incoherent Safety output unknown verdict: UNAVAILABLE",
+          "malformed/incoherent Safety output missing result key: UNAVAILABLE",
+          "malformed/incoherent Safety output extra result key: UNAVAILABLE",
+          "malformed/incoherent Safety output incomplete primary Why: UNAVAILABLE",
+          "malformed/incoherent Safety output secondary failure: UNAVAILABLE",
+          "malformed/incoherent Safety output extra presentation field: UNAVAILABLE",
+          "malformed/incoherent Safety output malformed component diagnostic: UNAVAILABLE",
+          "malformed/incoherent Safety output extra diagnostic key: UNAVAILABLE",
+          "malformed/incoherent Safety output wrong diagnostic identity type: UNAVAILABLE",
+          "malformed/incoherent Safety output malformed diagnostic reasons: UNAVAILABLE",
+          "coherent actual frozen Safety HOLD fallback is accepted through the Safety-result path only",
+          "HOLD/APPROVED_BUNDLE mismatch cannot authorize format",
+          "UNKNOWN/APPROVED_BUNDLE mismatch cannot authorize format",
+          "componentResults/bundleReasonCodes cannot authorize a missing or fallback presentation",
+          "Safety failure never manufactures a direct fallback",
+          "caller authority options and extra arguments are rejected before the authority chain",
+          "legacy lang / unknown stored preference fields cannot select analytics locale or authority",
+          "DTO retains no object references to any internal source, plan, result, bindings or registry",
+          "no raw authority, bindings, selectors, reason codes or upstream structures in public DTO"
+        ]
       },
       {
-        "name": "zero cycles",
-        "status": "EMPTY",
-        "primary": null,
-        "secondary": null
+        "file": "browser-packaging/runtime-facade/formatter.test.cjs",
+        "passed": 101,
+        "failed": 0,
+        "cases": [
+          "actual frozen Safety presentation formats: REF B3/unmapped",
+          "actual frozen Safety presentation formats: REF B3/known",
+          "actual frozen Safety presentation formats: REF B4/unmapped",
+          "actual frozen Safety presentation formats: REF B4/known",
+          "actual frozen Safety presentation formats: REF B5/unmapped",
+          "actual frozen Safety presentation formats: REF B5/known",
+          "actual frozen Safety presentation formats: QUAL insufficient basis",
+          "actual frozen Safety presentation formats: QUAL possible default profile",
+          "actual frozen Safety presentation formats: CMP practical",
+          "actual frozen Safety presentation formats: CMP achievement",
+          "actual frozen Safety presentation formats: CMP mental",
+          "actual frozen Safety presentation formats: CMP hours",
+          "actual frozen Safety presentation formats: CMP desire",
+          "actual frozen Safety presentation formats: CMP belief",
+          "actual frozen Safety presentation formats: CMP emotionIntensity",
+          "actual frozen Safety presentation formats: CMP frequency",
+          "actual frozen Safety presentation formats: TXT current reference differences",
+          "actual frozen Safety presentation formats: INT wording recurrence",
+          "actual frozen Safety presentation formats: INT dimension primary",
+          "actual frozen Safety presentation formats: INT dimension success",
+          "actual frozen Safety presentation formats: INT dimension scope",
+          "actual frozen Safety presentation formats: INT dimension nonGoals",
+          "actual frozen Safety presentation formats: INT dimension constraints",
+          "actual frozen Safety presentation formats: INT dimension rationale",
+          "actual frozen Safety presentation formats: PRA decrease",
+          "actual frozen Safety presentation formats: PRA low range",
+          "actual frozen Safety presentation formats: MEN low",
+          "actual frozen Safety presentation formats: MEN down",
+          "actual frozen Safety presentation formats: MEN frequency repeated",
+          "actual frozen Safety presentation formats: MEN frequency decreased",
+          "actual frozen Safety presentation formats: EMO known",
+          "actual frozen Safety presentation formats: EMO Other",
+          "actual frozen Safety presentation formats: EMO intensity increased",
+          "actual frozen Safety presentation formats: EMO intensity decreased",
+          "actual frozen Safety presentation formats: OUT increased",
+          "actual frozen Safety presentation formats: OUT decreased",
+          "actual frozen Safety presentation formats: OUT nearby",
+          "actual frozen Safety presentation formats: CTX series",
+          "actual frozen Safety presentation formats: CTX external secondary",
+          "actual frozen Safety presentation formats: REV selected keys",
+          "actual frozen Safety presentation formats: REV counts",
+          "actual frozen Safety presentation formats: REL decrease",
+          "actual frozen Safety presentation formats: REL co-increase",
+          "actual frozen Safety presentation formats: REL internal mental",
+          "actual frozen Safety presentation formats: REL internal emotionIntensity",
+          "actual frozen Safety presentation formats: MIX decision patch",
+          "actual frozen Safety presentation formats: MIX practical hours",
+          "actual frozen Safety presentation formats: MIX recorded direction",
+          "coverage includes every one of 25 INSIGHT bodies and E27/E28/E29/E30",
+          "actual Safety fallback formats the exact registered E01 body and identity",
+          "E27/E28/E29/E30 are exact, complete and ordered",
+          "decimal numerals, negative zero, tiny values and approved delta are preserved without recomputation",
+          "hours use their own frozen range without conversion or locale separators",
+          "ordinary approved numeric/enum lists use comma-space in record order",
+          "basis record groups use inner comma-space and outer semicolon-space",
+          "revision dimensions follow frozen D order; no sorting or repair of malformed lists",
+          "revision count formatting retains all six counts including zeros",
+          "ordinal is limited to increased/decreased/unchanged; fixed enums are inert exact strings",
+          "malformed component missing binding: entire format rejected",
+          "malformed component extra binding: entire format rejected",
+          "malformed component numeric string: entire format rejected",
+          "malformed component wrong range: entire format rejected",
+          "malformed component delta wrong range: entire format rejected",
+          "malformed component nonfinite: entire format rejected",
+          "malformed component unknown template: entire format rejected",
+          "malformed component wrong version: entire format rejected",
+          "malformed component role: entire format rejected",
+          "malformed component surface: entire format rejected",
+          "malformed component slot: entire format rejected",
+          "malformed component component identity: entire format rejected",
+          "malformed component extra component key: entire format rejected",
+          "malformed component missing component key: entire format rejected",
+          "malformed component wrong metric scalar tuple: entire format rejected",
+          "malformed component free HTML string: entire format rejected",
+          "malformed component free Markdown string: entire format rejected",
+          "presentation missing E30: no component salvage or manifest downgrade",
+          "presentation wrong E30: no component salvage or manifest downgrade",
+          "presentation Why order: no component salvage or manifest downgrade",
+          "presentation secondary missing component: no component salvage or manifest downgrade",
+          "presentation secondary mismatch: no component salvage or manifest downgrade",
+          "presentation primary missing: no component salvage or manifest downgrade",
+          "presentation interpretation: no component salvage or manifest downgrade",
+          "presentation nextFocus: no component salvage or manifest downgrade",
+          "presentation secondary nextFocus: no component salvage or manifest downgrade",
+          "presentation extra top key: no component salvage or manifest downgrade",
+          "presentation missing top key: no component salvage or manifest downgrade",
+          "presentation unknown mode: no component salvage or manifest downgrade",
+          "presentation wrong DTO version: no component salvage or manifest downgrade",
+          "presentation fallback in approved: no component salvage or manifest downgrade",
+          "presentation Why fixed fields mismatch: no component salvage or manifest downgrade",
+          "presentation Why selected rule mismatch: no component salvage or manifest downgrade",
+          "list lengths/types, basis enums/duplicates and fractional counts reject whole format",
+          "private registry fault missing placeholder: format rejects (no production injection API)",
+          "private registry fault extra placeholder: format rejects (no production injection API)",
+          "private registry fault malformed placeholder: format rejects (no production injection API)",
+          "private registry fault unsupported transform: format rejects (no production injection API)",
+          "private registry fault missing required flag: format rejects (no production injection API)",
+          "private registry fault registry version: format rejects (no production injection API)",
+          "formatter has one presentation argument; all upstream/authority inputs are rejected",
+          "fallback extra/missing/wrong data reject rather than manufacturing a registered body",
+          "formatting never accesses Intl/toLocaleString and never interprets caller HTML/Markdown"
+        ]
       },
       {
-        "name": "current known category",
-        "status": "READY",
-        "primary": "REF-01",
-        "secondary": "CTX-02"
-      },
-      {
-        "name": "current unlisted category",
-        "status": "READY",
-        "primary": "REF-01",
-        "secondary": "CTX-02"
-      },
-      {
-        "name": "mapped category ru",
-        "status": "READY",
-        "primary": "REF-01",
-        "secondary": "CTX-02"
-      },
-      {
-        "name": "mapped category de",
-        "status": "READY",
-        "primary": "REF-01",
-        "secondary": "CTX-02"
-      },
-      {
-        "name": "mapped category ar",
-        "status": "READY",
-        "primary": "REF-01",
-        "secondary": "CTX-02"
-      },
-      {
-        "name": "exact decimals",
-        "status": "READY",
-        "primary": "REF-01",
-        "secondary": "CTX-02"
-      },
-      {
-        "name": "two record increase",
-        "status": "READY",
-        "primary": "CMP-01:practical",
-        "secondary": "CMP-01:achievement"
-      },
-      {
-        "name": "two record decrease",
-        "status": "READY",
-        "primary": "CMP-01:practical",
-        "secondary": "CMP-01:achievement"
-      },
-      {
-        "name": "separate hours comparison",
-        "status": "READY",
-        "primary": "CMP-01:hours",
-        "secondary": "CMP-01:achievement"
-      },
-      {
-        "name": "ordinal frequency comparison",
-        "status": "READY",
-        "primary": "CMP-02:frequency",
-        "secondary": "CMP-01:practical"
-      },
-      {
-        "name": "three record decline",
-        "status": "READY",
-        "primary": "REL-01",
-        "secondary": "OUT-02"
-      },
-      {
-        "name": "five record window",
-        "status": "READY",
-        "primary": "OUT-02",
-        "secondary": "MEN-02"
-      },
-      {
-        "name": "explicit revision",
-        "status": "READY",
-        "primary": "REV-01",
-        "secondary": "CTX-02"
-      },
-      {
-        "name": "conflicting revision",
-        "status": "MIXED",
-        "primary": "MIX-01",
-        "secondary": "CTX-02"
-      },
-      {
-        "name": "mixed outcome direction",
-        "status": "MIXED",
-        "primary": "MIX-01",
-        "secondary": "CTX-02"
-      },
-      {
-        "name": "numeric string preserved",
-        "status": "INSUFFICIENT",
-        "primary": "QUAL-01",
-        "secondary": "CTX-02"
-      },
-      {
-        "name": "duplicate IDs",
-        "status": "INSUFFICIENT",
-        "primary": "QUAL-01",
-        "secondary": "CTX-02"
-      },
-      {
-        "name": "blank ID",
-        "status": "INSUFFICIENT",
-        "primary": "QUAL-01",
-        "secondary": "CTX-02"
-      },
-      {
-        "name": "invalid chronology",
-        "status": "INSUFFICIENT",
-        "primary": "QUAL-01",
-        "secondary": "CTX-02"
-      },
-      {
-        "name": "unsupported source version",
-        "status": "UNSUPPORTED_SOURCE",
-        "primary": null,
-        "secondary": null
+        "file": "browser-packaging/runtime-facade/browser.test.cjs",
+        "passed": 65,
+        "failed": 0,
+        "cases": [
+          "actual artifact creates exactly the one immutable facade global; all earlier globals unchanged",
+          "artifact loads with no external Node/CommonJS globals at all",
+          "same actual artifact rejects a second load without replacing the first facade",
+          "namespace collision ordinary own: no overwrite, alternate authority or getter invocation",
+          "namespace collision nonconfigurable own: no overwrite, alternate authority or getter invocation",
+          "namespace collision accessor own: no overwrite, alternate authority or getter invocation",
+          "namespace collision inherited: no overwrite, alternate authority or getter invocation",
+          "load never evaluates; private instrumentation verifies exactly one Analyze/Safety call per explicit evaluate",
+          "Node vs bundled evaluate parity: REF B3/unmapped",
+          "Node vs bundled evaluate parity: REF B3/known",
+          "Node vs bundled evaluate parity: REF B4/unmapped",
+          "Node vs bundled evaluate parity: REF B4/known",
+          "Node vs bundled evaluate parity: REF B5/unmapped",
+          "Node vs bundled evaluate parity: REF B5/known",
+          "Node vs bundled evaluate parity: QUAL insufficient basis",
+          "Node vs bundled evaluate parity: QUAL possible default profile",
+          "Node vs bundled evaluate parity: CMP practical",
+          "Node vs bundled evaluate parity: CMP achievement",
+          "Node vs bundled evaluate parity: CMP mental",
+          "Node vs bundled evaluate parity: CMP hours",
+          "Node vs bundled evaluate parity: CMP desire",
+          "Node vs bundled evaluate parity: CMP belief",
+          "Node vs bundled evaluate parity: CMP emotionIntensity",
+          "Node vs bundled evaluate parity: CMP frequency",
+          "Node vs bundled evaluate parity: TXT current reference differences",
+          "Node vs bundled evaluate parity: INT wording recurrence",
+          "Node vs bundled evaluate parity: INT dimension primary",
+          "Node vs bundled evaluate parity: INT dimension success",
+          "Node vs bundled evaluate parity: INT dimension scope",
+          "Node vs bundled evaluate parity: INT dimension nonGoals",
+          "Node vs bundled evaluate parity: INT dimension constraints",
+          "Node vs bundled evaluate parity: INT dimension rationale",
+          "Node vs bundled evaluate parity: PRA decrease",
+          "Node vs bundled evaluate parity: PRA low range",
+          "Node vs bundled evaluate parity: MEN low",
+          "Node vs bundled evaluate parity: MEN down",
+          "Node vs bundled evaluate parity: MEN frequency repeated",
+          "Node vs bundled evaluate parity: MEN frequency decreased",
+          "Node vs bundled evaluate parity: EMO known",
+          "Node vs bundled evaluate parity: EMO Other",
+          "Node vs bundled evaluate parity: EMO intensity increased",
+          "Node vs bundled evaluate parity: EMO intensity decreased",
+          "Node vs bundled evaluate parity: OUT increased",
+          "Node vs bundled evaluate parity: OUT decreased",
+          "Node vs bundled evaluate parity: OUT nearby",
+          "Node vs bundled evaluate parity: CTX series",
+          "Node vs bundled evaluate parity: CTX external secondary",
+          "Node vs bundled evaluate parity: REV selected keys",
+          "Node vs bundled evaluate parity: REV counts",
+          "Node vs bundled evaluate parity: REL decrease",
+          "Node vs bundled evaluate parity: REL co-increase",
+          "Node vs bundled evaluate parity: REL internal mental",
+          "Node vs bundled evaluate parity: REL internal emotionIntensity",
+          "Node vs bundled evaluate parity: MIX decision patch",
+          "Node vs bundled evaluate parity: MIX practical hours",
+          "Node vs bundled evaluate parity: MIX recorded direction",
+          "Node vs bundled evaluate parity: explicit MF3",
+          "Node vs bundled evaluate parity: explicit MF4",
+          "Node vs bundled evaluate parity: empty primary actual Safety fallback",
+          "Node vs bundled evaluate parity: nonfinite adapter failure",
+          "Node vs bundled evaluate parity: actual closed TXT plan failure",
+          "Node vs bundled evaluate parity: exact decimals and negative zero",
+          "actual facade returns new deterministic immutable DTOs with no state references",
+          "actual facade rejects caller authority, executable source and getter without exposing raw data",
+          "valid then failed calls never reuse earlier approved DTO or fallback"
+        ]
       }
     ]
   },
-  "safetyParity": {
-    "passed": 15,
-    "failed": 0,
-    "cases": [
-      {
-        "name": "MF3 primary plus E30 ALLOW",
-        "verdict": "ALLOW",
-        "mode": "APPROVED_BUNDLE"
-      },
-      {
-        "name": "current unlisted category ALLOW",
-        "verdict": "ALLOW",
-        "mode": "APPROVED_BUNDLE"
-      },
-      {
-        "name": "MF4 primary and secondary plus E30 ALLOW",
-        "verdict": "ALLOW",
-        "mode": "APPROVED_BUNDLE"
-      },
-      {
-        "name": "separate hours ALLOW",
-        "verdict": "ALLOW",
-        "mode": "APPROVED_BUNDLE"
-      },
-      {
-        "name": "ordinal frequency ALLOW",
-        "verdict": "ALLOW",
-        "mode": "APPROVED_BUNDLE"
-      },
-      {
-        "name": "unknown template UNKNOWN",
-        "verdict": "UNKNOWN",
-        "mode": "FALLBACK_ONLY"
-      },
-      {
-        "name": "wrong policy UNKNOWN",
-        "verdict": "UNKNOWN",
-        "mode": "FALLBACK_ONLY"
-      },
-      {
-        "name": "wrong provenance UNKNOWN",
-        "verdict": "UNKNOWN",
-        "mode": "FALLBACK_ONLY"
-      },
-      {
-        "name": "missing E30 UNKNOWN",
-        "verdict": "UNKNOWN",
-        "mode": "FALLBACK_ONLY"
-      },
-      {
-        "name": "unregistered Interpretation UNKNOWN",
-        "verdict": "UNKNOWN",
-        "mode": "FALLBACK_ONLY"
-      },
-      {
-        "name": "secondary Next Focus HOLD",
-        "verdict": "HOLD",
-        "mode": "FALLBACK_ONLY"
-      },
-      {
-        "name": "capability Next Focus HOLD",
-        "verdict": "HOLD",
-        "mode": "FALLBACK_ONLY"
-      },
-      {
-        "name": "failed secondary atomic UNKNOWN",
-        "verdict": "UNKNOWN",
-        "mode": "FALLBACK_ONLY"
-      },
-      {
-        "name": "empty analytical plan UNKNOWN",
-        "verdict": "UNKNOWN",
-        "mode": "FALLBACK_ONLY"
-      },
-      {
-        "name": "malformed source UNKNOWN",
-        "verdict": "UNKNOWN",
-        "mode": "FALLBACK_ONLY"
-      }
-    ]
+  "browserParity": {
+    "passed": 54,
+    "failed": 0
   },
-  "sourceMutation": "PASS: Node and bundled inputs and frozen bytes unchanged",
-  "production": "PASS: all 17 baseline files unchanged; CACHE v16; APP_VERSION 0.1.0; origin/main unchanged",
-  "completeFrozenSuiteRerun": false
+  "publicFacade": {
+    "global": "PHEISIRAETHA_ANALYTICS_V1",
+    "operations": [
+      "evaluate"
+    ],
+    "immutableObject": true,
+    "immutableGlobalBinding": true,
+    "collisionRejectedWithoutOverwrite": true,
+    "rawAndTestApisAbsent": true,
+    "DTO": "new detached deeply frozen plain data; exact five top-level / seven component keys",
+    "lang": "en",
+    "dir": "ltr"
+  },
+  "browserExecution": {
+    "artifactTested": "browser-packaging/artifacts/analytics-v1.f1f975900faaa64649bcef42412c1856543c8716711d4119df9b964f4bf8c824.js",
+    "environment": "isolated JavaScript VM with trapped browser APIs",
+    "externalNodeGlobalsRequired": false,
+    "runtimeDOMStorageNetworkClockRandomLocaleAccesses": 0,
+    "loadEvaluations": 0
+  },
+  "artifacts": {
+    "historical": {
+      "phase": "2B-3B-1",
+      "file": "browser-packaging/artifacts/analytics-v1.45deb294b2ecc2a8a1f3bf7067d5822d0676841ab82c36d4c95db08b9bfa821a.js",
+      "sha256": "45deb294b2ecc2a8a1f3bf7067d5822d0676841ab82c36d4c95db08b9bfa821a",
+      "disposition": "retained unchanged; historical, never selected as current output"
+    },
+    "current": {
+      "file": "browser-packaging/artifacts/analytics-v1.f1f975900faaa64649bcef42412c1856543c8716711d4119df9b964f4bf8c824.js",
+      "sha256": "f1f975900faaa64649bcef42412c1856543c8716711d4119df9b964f4bf8c824",
+      "sizeBytes": 243504
+    }
+  },
+  "reproducibility": {
+    "repeatedFreshStages": 2,
+    "artifactByteIdentical": true,
+    "profileAndPinnedLockUnchanged": true,
+    "cleanLockedBuild": {
+      "result": "PASS",
+      "baseCommit": "eb24cac88bf82fc9ebc38914a90bc47829a6adcb",
+      "initialDependencyDirectory": "absent",
+      "initialNpmCache": "empty",
+      "install": "npm ci --prefix browser-packaging --ignore-scripts --no-audit --no-fund",
+      "lifecycleScripts": false,
+      "sha256": "f1f975900faaa64649bcef42412c1856543c8716711d4119df9b964f4bf8c824",
+      "artifactByteIdentical": true,
+      "manifestIdentical": true
+    }
+  },
+  "scope": {
+    "changedFiles": [
+      "browser-packaging/README.md",
+      "browser-packaging/artifacts/analytics-v1.f1f975900faaa64649bcef42412c1856543c8716711d4119df9b964f4bf8c824.js",
+      "browser-packaging/build-manifest.json",
+      "browser-packaging/build.cjs",
+      "browser-packaging/entry.cjs",
+      "browser-packaging/runtime-facade/browser.test.cjs",
+      "browser-packaging/runtime-facade/canonical-formatter.cjs",
+      "browser-packaging/runtime-facade/formatter.test.cjs",
+      "browser-packaging/runtime-facade/runtime.cjs",
+      "browser-packaging/runtime-facade/runtime.test.cjs",
+      "browser-packaging/runtime-facade/safety-contract.cjs",
+      "browser-packaging/runtime-facade/test-support.cjs",
+      "browser-packaging/verification-results.json",
+      "browser-packaging/verify.cjs"
+    ],
+    "preservedBaseFiles": 33,
+    "productionSpecFilesUnchanged": 17,
+    "acceptedCoreProductionFilesUnchanged": 4,
+    "requiredSoleParent": "eb24cac88bf82fc9ebc38914a90bc47829a6adcb",
+    "originMainLastObserved": "255a5d9d27461dcacaebc1bc80ab322dd54b4de8",
+    "CACHE": "pheisiraetha-v16",
+    "APP_VERSION": "0.1.0",
+    "productionWiringChanged": false,
+    "legacyHardeningMerged": false,
+    "deployment": false,
+    "pullRequest": false,
+    "merge": false
+  },
+  "fullFrozenSafetySuiteRerun": false,
+  "fullFrozenAnalysisSuiteRerun": false,
+  "phase3B3IntegrationSuite": false,
+  "phase3B4Arbitration": false
 }

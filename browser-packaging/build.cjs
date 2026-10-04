@@ -12,6 +12,12 @@ const ROOT = path.resolve(__dirname, '..');
 const SPEC_COMMIT = '87c4e91c23d1c59bd4735d7fd75c41f35c533797';
 const PRODUCTION_COMMIT = '255a5d9d27461dcacaebc1bc80ab322dd54b4de8';
 const ESBUILD_VERSION = '0.25.5';
+const CORE_COMMIT = 'eb24cac88bf82fc9ebc38914a90bc47829a6adcb';
+const OLD_ARTIFACT_SHA256 = '45deb294b2ecc2a8a1f3bf7067d5822d0676841ab82c36d4c95db08b9bfa821a';
+const CORE_FILES = Object.freeze(['runtime-core/plain-data.cjs', 'runtime-core/source-snapshot.cjs',
+  'runtime-core/closed-catalog.cjs', 'runtime-core/presentation-plan.cjs']);
+const FACADE_FILES = Object.freeze(['runtime-facade/safety-contract.cjs', 'runtime-facade/canonical-formatter.cjs',
+  'runtime-facade/runtime.cjs']);
 const INPUTS = Object.freeze([
   Object.freeze({ file: 'analysis.js', commit: '94b112488e576e08495443d93c048a528c39aac7',
     blob: 'cc6c515dd86cd957d2f199d064372ef6817deb7e',
@@ -44,10 +50,28 @@ function sourceBlobs() {
   });
 }
 
+function runtimeSources() {
+  return [...CORE_FILES, ...FACADE_FILES].map(file => {
+    const bytes = fs.readFileSync(path.join(__dirname, file));
+    const blob = execFileSync('git', ['hash-object', '--stdin'], { input: bytes }).toString().trim();
+    if (CORE_FILES.includes(file)) {
+      assert.equal(git('rev-parse', `${CORE_COMMIT}:browser-packaging/${file}`).toString().trim(), blob,
+        `${file}: accepted 3B-2A production bytes must remain exact`);
+    }
+    return { file, sourceKind: CORE_FILES.includes(file) ? 'accepted-3B-2A-core' : '3B-2B-composition',
+      ...(CORE_FILES.includes(file) ? { sourceCommit: CORE_COMMIT } : {}), blob, sha256: sha256(bytes), bytes };
+  });
+}
+
 function materialize(stage, entryBytes) {
   fs.mkdirSync(path.join(stage, 'frozen'));
   const sources = sourceBlobs();
   for (const input of sources) fs.writeFileSync(path.join(stage, 'frozen', input.file), input.bytes);
+  for (const input of runtimeSources()) {
+    const destination = path.join(stage, input.file);
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.writeFileSync(destination, input.bytes);
+  }
   fs.writeFileSync(path.join(stage, 'entry.cjs'), entryBytes);
   return sources;
 }
@@ -58,6 +82,8 @@ function assertSourcesUnchanged(stage, sources) {
       `${input.file}: bundling must not mutate source bytes`);
   }
   assert.deepEqual(sourceBlobs().map(s => s.bytes), sources.map(s => s.bytes));
+  for (const input of runtimeSources()) assert.deepEqual(fs.readFileSync(path.join(stage, input.file)), input.bytes,
+    `${input.file}: staging/bundling must not mutate runtime source bytes`);
 }
 
 async function compile(entryBytes = fs.readFileSync(path.join(__dirname, 'entry.cjs'))) {
@@ -68,7 +94,8 @@ async function compile(entryBytes = fs.readFileSync(path.join(__dirname, 'entry.
     const sources = materialize(stage, entryBytes);
     const result = await esbuild.build({ ...PROFILE, absWorkingDir: stage });
     assert.deepEqual(result.warnings, []);
-    assert.deepEqual(Object.keys(result.metafile.inputs).sort(), ['entry.cjs', 'frozen/analysis.js', 'frozen/safety.js']);
+    assert.deepEqual(Object.keys(result.metafile.inputs).sort(),
+      ['entry.cjs', 'frozen/analysis.js', 'frozen/safety.js', ...CORE_FILES, ...FACADE_FILES].sort());
     const imports = result.metafile.inputs['frozen/safety.js'].imports;
     assert.deepEqual(imports, [{ path: 'frozen/analysis.js', kind: 'require-call', original: './analysis.js' }],
       'Safety must resolve its literal require to the same exact frozen Analysis module');
@@ -80,7 +107,7 @@ async function compile(entryBytes = fs.readFileSync(path.join(__dirname, 'entry.
     assert.deepEqual(result.metafile.outputs['analytics-v1.js'].imports, []);
     assertSourcesUnchanged(stage, sources);
     const bytes = Buffer.from(result.outputFiles[0].contents);
-    return { bytes, hash: sha256(bytes), entryHash: sha256(entryBytes) };
+    return { bytes, hash: sha256(bytes), entryHash: sha256(entryBytes), inputGraph: Object.keys(result.metafile.inputs).sort() };
   } finally {
     fs.rmSync(stage, { recursive: true, force: true });
   }
@@ -94,11 +121,18 @@ async function build() {
   const file = `analytics-v1.${result.hash}.js`;
   const directory = path.join(__dirname, 'artifacts');
   fs.mkdirSync(directory, { recursive: true });
-  // Refuse a stale artifact set rather than deleting or silently replacing it.
-  assert.ok(fs.readdirSync(directory).every(name => name === file), 'unexpected/stale artifact: review before rebuilding');
+  // Explicitly retain the byte-identical historical 3B-1 checkpoint alongside the
+  // one current artifact. No deletion, in-place replacement, or "latest" choice.
+  const historical = `analytics-v1.${OLD_ARTIFACT_SHA256}.js`;
+  assert.equal(sha256(fs.readFileSync(path.join(directory, historical))), OLD_ARTIFACT_SHA256);
+  assert.ok(fs.readdirSync(directory).every(name => name === historical || name === file),
+    'unexpected/stale current artifact: review before rebuilding');
   fs.writeFileSync(path.join(directory, file), result.bytes);
   const manifest = {
-    manifestVersion: 1, phase: '2B-3B-1', specCommit: SPEC_COMMIT, productionCommit: PRODUCTION_COMMIT,
+    manifestVersion: 1, phase: '2B-3B-2B', specCommit: SPEC_COMMIT, productionCommit: PRODUCTION_COMMIT,
+    requiredSoleParent: CORE_COMMIT, acceptedCoreCommit: CORE_COMMIT,
+    frozenSafetyV1Commit: '0e97042aba92cafac3498e8a220cd4c81897ecb8',
+    frozenRegistryCommit: 'ba46070bbcd42af51fb534c3282dd8a350bcfb20',
     commands: {
       install: 'npm ci --prefix browser-packaging --ignore-scripts --no-audit --no-fund',
       build: 'npm run build --prefix browser-packaging',
@@ -108,17 +142,21 @@ async function build() {
       esbuildPackageIntegrity: lock.packages['node_modules/esbuild'].integrity,
       lockfileSha256: sha256(lockBytes) },
     profile: PROFILE, inputs: INPUTS,
+    runtimeSources: runtimeSources().map(({ bytes, ...identity }) => ({ ...identity, file: `browser-packaging/${identity.file}` })),
+    inputGraph: result.inputGraph,
     resolution: { importer: 'frozen/safety.js', specifier: './analysis.js', resolved: 'frozen/analysis.js',
       analysisModuleCount: 1, externalImports: [] },
     entry: { file: 'browser-packaging/entry.cjs', sha256: result.entryHash },
     output: { file: `browser-packaging/artifacts/${file}`, sha256: result.hash, sizeBytes: result.bytes.length },
-    exposure: 'private IIFE; no global exports or evaluate facade; no production analytics runtime'
+    historicalArtifact: { phase: '2B-3B-1', file: `browser-packaging/artifacts/${historical}`,
+      sha256: OLD_ARTIFACT_SHA256, disposition: 'retained unchanged; historical, never selected as current output' },
+    exposure: 'one immutable PHEISIRAETHA_ANALYTICS_V1.evaluate facade; render-only DTO; no production loading/wiring'
   };
   fs.writeFileSync(path.join(__dirname, 'build-manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
   console.log(JSON.stringify({ artifact: manifest.output.file, sha256: result.hash, entrySha256: result.entryHash }));
   return manifest;
 }
 
-module.exports = { ROOT, SPEC_COMMIT, PRODUCTION_COMMIT, ESBUILD_VERSION, INPUTS, PROFILE,
-  sha256, git, sourceBlobs, materialize, assertSourcesUnchanged, compile, build };
+module.exports = { ROOT, SPEC_COMMIT, PRODUCTION_COMMIT, ESBUILD_VERSION, CORE_COMMIT, OLD_ARTIFACT_SHA256,
+  CORE_FILES, FACADE_FILES, INPUTS, PROFILE, sha256, git, sourceBlobs, runtimeSources, materialize, assertSourcesUnchanged, compile, build };
 if (require.main === module) build().catch(error => { console.error(error); process.exitCode = 1; });

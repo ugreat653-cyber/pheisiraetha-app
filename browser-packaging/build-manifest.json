@@ -1,8 +1,12 @@
 {
   "manifestVersion": 1,
-  "phase": "2B-3B-1",
+  "phase": "2B-3B-2B",
   "specCommit": "87c4e91c23d1c59bd4735d7fd75c41f35c533797",
   "productionCommit": "255a5d9d27461dcacaebc1bc80ab322dd54b4de8",
+  "requiredSoleParent": "eb24cac88bf82fc9ebc38914a90bc47829a6adcb",
+  "acceptedCoreCommit": "eb24cac88bf82fc9ebc38914a90bc47829a6adcb",
+  "frozenSafetyV1Commit": "0e97042aba92cafac3498e8a220cd4c81897ecb8",
+  "frozenRegistryCommit": "ba46070bbcd42af51fb534c3282dd8a350bcfb20",
   "commands": {
     "install": "npm ci --prefix browser-packaging --ignore-scripts --no-audit --no-fund",
     "build": "npm run build --prefix browser-packaging",
@@ -56,6 +60,66 @@
       "sha256": "ad6f6d57665c23fc87b49c1342e0a88ca32e4f77ceb2bb5377a21c043c177b70"
     }
   ],
+  "runtimeSources": [
+    {
+      "file": "browser-packaging/runtime-core/plain-data.cjs",
+      "sourceKind": "accepted-3B-2A-core",
+      "sourceCommit": "eb24cac88bf82fc9ebc38914a90bc47829a6adcb",
+      "blob": "5ba66c3e82a163051c414b2f585c99b3d7a51391",
+      "sha256": "952c0894e6b1c7e610303b16c114bbb7e086b6959b5dd7fd59712983c0a3c486"
+    },
+    {
+      "file": "browser-packaging/runtime-core/source-snapshot.cjs",
+      "sourceKind": "accepted-3B-2A-core",
+      "sourceCommit": "eb24cac88bf82fc9ebc38914a90bc47829a6adcb",
+      "blob": "a6f4bd8ff38f3a6b768212a1bca1311167a8432b",
+      "sha256": "9bc2b4344dee65217bd4875f0325024b21587368690546303ae9c52e41217f62"
+    },
+    {
+      "file": "browser-packaging/runtime-core/closed-catalog.cjs",
+      "sourceKind": "accepted-3B-2A-core",
+      "sourceCommit": "eb24cac88bf82fc9ebc38914a90bc47829a6adcb",
+      "blob": "7e31b6608ab2ef1fa0bb4456c1da4c50b6b33197",
+      "sha256": "6a3c93771a7309b202718c0a66b62eafcf27e9e869359f85e6c59f7f15181eb0"
+    },
+    {
+      "file": "browser-packaging/runtime-core/presentation-plan.cjs",
+      "sourceKind": "accepted-3B-2A-core",
+      "sourceCommit": "eb24cac88bf82fc9ebc38914a90bc47829a6adcb",
+      "blob": "b0faa6aa578a3b9b3d1061782d7fd09168130306",
+      "sha256": "8ede6eb7e0426dcd5fef29b27c219480ccd92fcee92483e8b67c425ef9b3582c"
+    },
+    {
+      "file": "browser-packaging/runtime-facade/safety-contract.cjs",
+      "sourceKind": "3B-2B-composition",
+      "blob": "14fbb7ee865c07ad3275fcd3bd22ae4c43129dc4",
+      "sha256": "1749ddff2e7cbc9abda4d374feae44724c78a83725412c423081b88569e32cb5"
+    },
+    {
+      "file": "browser-packaging/runtime-facade/canonical-formatter.cjs",
+      "sourceKind": "3B-2B-composition",
+      "blob": "d19998ee06e579e3683369408b5cb6a60da30772",
+      "sha256": "26bda1e61698780533bfa354032faabb1689d84726f11f4aeccb1a53d665b172"
+    },
+    {
+      "file": "browser-packaging/runtime-facade/runtime.cjs",
+      "sourceKind": "3B-2B-composition",
+      "blob": "24fd12ef0c6b75a3262e9894c48c59ec7729bcb6",
+      "sha256": "2428f4f0267d0f5d909e73a519163acadbb36458046ff61d141641b0b68b9df5"
+    }
+  ],
+  "inputGraph": [
+    "entry.cjs",
+    "frozen/analysis.js",
+    "frozen/safety.js",
+    "runtime-core/closed-catalog.cjs",
+    "runtime-core/plain-data.cjs",
+    "runtime-core/presentation-plan.cjs",
+    "runtime-core/source-snapshot.cjs",
+    "runtime-facade/canonical-formatter.cjs",
+    "runtime-facade/runtime.cjs",
+    "runtime-facade/safety-contract.cjs"
+  ],
   "resolution": {
     "importer": "frozen/safety.js",
     "specifier": "./analysis.js",
@@ -65,12 +129,18 @@
   },
   "entry": {
     "file": "browser-packaging/entry.cjs",
-    "sha256": "40cab1b1f9913f25a9ae34bf35b47763dc7a232189e77fbe5f10f32f3b52a8a3"
+    "sha256": "80e9274062250d75243a47925ab5043323c6ad26ab85862b27c02c8ca04e827a"
   },
   "output": {
+    "file": "browser-packaging/artifacts/analytics-v1.f1f975900faaa64649bcef42412c1856543c8716711d4119df9b964f4bf8c824.js",
+    "sha256": "f1f975900faaa64649bcef42412c1856543c8716711d4119df9b964f4bf8c824",
+    "sizeBytes": 243504
+  },
+  "historicalArtifact": {
+    "phase": "2B-3B-1",
     "file": "browser-packaging/artifacts/analytics-v1.45deb294b2ecc2a8a1f3bf7067d5822d0676841ab82c36d4c95db08b9bfa821a.js",
     "sha256": "45deb294b2ecc2a8a1f3bf7067d5822d0676841ab82c36d4c95db08b9bfa821a",
-    "sizeBytes": 188626
+    "disposition": "retained unchanged; historical, never selected as current output"
   },
-  "exposure": "private IIFE; no global exports or evaluate facade; no production analytics runtime"
+  "exposure": "one immutable PHEISIRAETHA_ANALYTICS_V1.evaluate facade; render-only DTO; no production loading/wiring"
 }

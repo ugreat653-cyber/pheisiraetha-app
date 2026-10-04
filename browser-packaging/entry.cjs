@@ -1,9 +1,8 @@
 'use strict';
 
-// Packaging checkpoint only: instantiate the exact frozen modules privately.
-// No evaluation, facade, adapter, plan builder, formatter, renderer or wiring.
-// These bindings stay inside the generated IIFE; nothing is exported globally.
-const analysis = require('./frozen/analysis.js');
-const safety = require('./frozen/safety.js');
-void analysis;
-void safety;
+// Refuse every pre-existing authority without reading a getter or overwriting it.
+if ('PHEISIRAETHA_ANALYTICS_V1' in globalThis) throw new Error('ANALYTICS_NAMESPACE_COLLISION');
+const { evaluate } = require('./runtime-facade/runtime.cjs');
+Object.defineProperty(globalThis, 'PHEISIRAETHA_ANALYTICS_V1', {
+  value: Object.freeze({ evaluate }), enumerable: true, writable: false, configurable: false
+});
