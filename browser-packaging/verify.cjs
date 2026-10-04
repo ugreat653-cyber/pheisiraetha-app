@@ -147,6 +147,10 @@ const AGGREGATION_VERIFIER = 'browser-packaging/verify.cjs';
 
 function aggregationScope() {
   const head = build.git('rev-parse', 'HEAD').toString().trim();
+  assert.equal(build.git('diff', '--cached', '--name-only', '-z', head).length, 0,
+    'aggregation verification requires no staged changes relative to HEAD');
+  assert.equal(build.git('diff', '--name-only', '-z').length, 0,
+    'aggregation verification requires no unstaged changes');
   build.git('merge-base', '--is-ancestor', AGGREGATION_BASE, head);
   const tree = ref => new Map(build.git('ls-tree', '-r', '-z', ref).toString().split('\0').filter(Boolean).map(entry => {
     const separator = entry.indexOf('\t');
@@ -169,7 +173,7 @@ function aggregationScope() {
     const local = path.join(build.ROOT, file), stat = fs.lstatSync(local);
     assert.ok(stat.isFile(), `${file}: expected regular worktree file`);
     assert.equal(Boolean(stat.mode & 0o111), identity.mode === '100755', `${file}: worktree executable mode changed`);
-    if (file !== AGGREGATION_VERIFIER) assert.deepEqual(fs.readFileSync(local), build.git('show', `${head}:${file}`),
+    assert.deepEqual(fs.readFileSync(local), build.git('show', `${head}:${file}`),
       `${file}: worktree bytes differ from the scoped commit`);
   }
   for (const file of AGGREGATION_TESTS) {
@@ -178,6 +182,7 @@ function aggregationScope() {
     assert.ok(fs.lstatSync(path.join(__dirname, file)).isFile(), `${relative}: required test is missing`);
   }
   const untracked = build.git('ls-files', '--others', '--exclude-standard', '-z').toString().split('\0').filter(Boolean);
+  assert.equal(untracked.length, 0, 'aggregation verification requires no untracked files');
   assert.ok(untracked.every(file => allowed.has(file)), `out-of-scope untracked paths: ${untracked.filter(file => !allowed.has(file))}`);
   return { baseCommit: AGGREGATION_BASE, headCommit: head, allowedChanges: [...allowed] };
 }
