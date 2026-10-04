@@ -213,5 +213,96 @@ async function verifyAggregationTestsOnly() {
   console.log(JSON.stringify({ phase: '2B-3B-3', route: 'tests-only', scope: after,
     focusedTests: { passed: suites.reduce((total, suite) => total + suite.passed, 0), failed: 0, suites } }, null, 2));
 }
-(process.argv.includes('--tests-only') ? verifyAggregationTestsOnly : verify)
+const APP_INTEGRATION_BASE = '8abdd344cf9ef9c7feafb0da70c3c245ee319d63';
+const APP_INTEGRATION_ADDITIONS = Object.freeze([
+  'app-analytics-basic.test.cjs',
+  'app-analytics-generation.test.cjs',
+  'app-analytics-persistence.test.cjs',
+  'app-analytics-dom-isolation.test.cjs'
+].map(file => `browser-packaging/integration/${file}`));
+const APP_INTEGRATION_ALLOWED = Object.freeze(['app.js', AGGREGATION_VERIFIER, ...APP_INTEGRATION_ADDITIONS]);
+const APP_INTEGRATION_TESTS = Object.freeze([
+  ...AGGREGATION_TESTS.map(file => `browser-packaging/${file}`),
+  'legacy-dom.test.js',
+  ...APP_INTEGRATION_ADDITIONS
+]);
+
+function appIntegrationScope() {
+  const head = build.git('rev-parse', 'HEAD').toString().trim();
+  assert.equal(build.git('diff', '--cached', '--name-only', '-z', head).length, 0,
+    '3B-5 verification requires no staged changes relative to HEAD');
+  assert.equal(build.git('diff', '--name-only', '-z').length, 0,
+    '3B-5 verification requires no unstaged changes');
+  assert.equal(build.git('ls-files', '--others', '--exclude-standard', '-z').length, 0,
+    '3B-5 verification requires no untracked files');
+  build.git('merge-base', '--is-ancestor', APP_INTEGRATION_BASE, head);
+  const tree = ref => new Map(build.git('ls-tree', '-r', '-z', ref).toString().split('\0').filter(Boolean).map(entry => {
+    const separator = entry.indexOf('\t');
+    const [mode, type, blob] = entry.slice(0, separator).split(' ');
+    return [entry.slice(separator + 1), { mode, type, blob }];
+  }));
+  const baseline = tree(APP_INTEGRATION_BASE), current = tree(head);
+  const allowed = new Set(APP_INTEGRATION_ALLOWED);
+  // Every protected base blob and mode is pinned, including all frozen runtime,
+  // facade, artifact and accepted test bytes, especially legacy-dom.test.js.
+  for (const [file, identity] of baseline) {
+    assert.ok(current.has(file), `${file}: 3B-5 baseline file removed`);
+    if (allowed.has(file)) assert.deepEqual(
+      { mode: current.get(file).mode, type: current.get(file).type },
+      { mode: identity.mode, type: identity.type }, `${file}: baseline mode/type changed`);
+    else assert.deepEqual(current.get(file), identity, `${file}: protected 3B-5 baseline identity changed`);
+  }
+  for (const [file, identity] of current) {
+    if (!baseline.has(file)) assert.ok(APP_INTEGRATION_ADDITIONS.includes(file),
+      `${file}: unexpected 3B-5 committed addition`);
+    if (allowed.has(file)) assert.deepEqual({ mode: identity.mode, type: identity.type },
+      { mode: '100644', type: 'blob' }, `${file}: expected regular non-executable file`);
+    const local = path.join(build.ROOT, file), stat = fs.lstatSync(local);
+    assert.ok(stat.isFile(), `${file}: expected regular worktree file`);
+    assert.equal(Boolean(stat.mode & 0o111), identity.mode === '100755', `${file}: worktree executable mode changed`);
+    assert.deepEqual(fs.readFileSync(local), build.git('show', `${head}:${file}`),
+      `${file}: worktree bytes differ from the scoped commit`);
+  }
+  for (const file of APP_INTEGRATION_TESTS) {
+    assert.ok(current.has(file), `${file}: required 3B-5 route test is not committed`);
+    assert.ok(fs.lstatSync(path.join(build.ROOT, file)).isFile(), `${file}: required test is missing`);
+  }
+  return { baseCommit: APP_INTEGRATION_BASE, headCommit: head, allowedChanges: [...allowed],
+    protectedBaseFiles: [...baseline.keys()].filter(file => !allowed.has(file)).length };
+}
+
+async function verifyAppIntegrationTestsOnly() {
+  assert.deepEqual(process.argv.slice(2), ['--3b5-tests-only'], 'select the 3B-5 tests-only route on its own');
+  // Run the accepted ten 3B-3 suites, the unchanged legacy hardening suite and
+  // all four wiring suites. No build, clean install, full frozen suites or writes.
+  const before = appIntegrationScope();
+  let suites, after;
+  try {
+    suites = APP_INTEGRATION_TESTS.map(file => {
+      const output = execFileSync(process.execPath, ['--test', '--test-reporter=tap', path.join(build.ROOT, file)],
+        { cwd: build.ROOT, encoding: 'utf8', timeout: 120000, maxBuffer: 4 * 1024 * 1024 });
+      const count = name => {
+        const matches = [...output.matchAll(new RegExp(`^# ${name} (\\d+)$`, 'gm'))];
+        assert.equal(matches.length, 1, `${file}: one ${name} summary required`);
+        const value = Number(matches[0][1]);
+        assert.ok(Number.isSafeInteger(value), `${file}: invalid ${name} summary`);
+        return value;
+      };
+      const tests = count('tests'), passed = count('pass');
+      assert.ok(tests > 0, `${file}: no tests executed`);
+      for (const name of ['fail', 'cancelled', 'skipped', 'todo']) assert.equal(count(name), 0, `${file}: ${name} tests`);
+      assert.equal(passed, tests, `${file}: every selected test must pass`);
+      return { file, passed, failed: 0 };
+    });
+  } finally {
+    // Check the committed tree and all local bytes even when a suite fails.
+    after = appIntegrationScope();
+    assert.deepEqual(after, before, '3B-5 scope changed during focused tests');
+  }
+  console.log(JSON.stringify({ phase: '2B-3B-5', route: '3b5-tests-only', scope: after,
+    focusedTests: { passed: suites.reduce((total, suite) => total + suite.passed, 0), failed: 0, suites } }, null, 2));
+}
+
+(process.argv.includes('--tests-only') ? verifyAggregationTestsOnly :
+  process.argv.includes('--3b5-tests-only') ? verifyAppIntegrationTestsOnly : verify)
   ().catch(error => { console.error(error); process.exitCode = 1; });
