@@ -3,6 +3,7 @@
   const ONBOARDING_KEY = 'pheisiraetha_onboarding_v01';
   const LANGUAGE_KEY = 'pheisiraetha_language_v01';
   const APP_VERSION = '0.1.0';
+  const ANALYTICS_ENABLED = false;
   const LOCALES = window.PHEISIRAETHA_LOCALES;
   const SUPPORTED_LANGUAGES = Object.keys(LOCALES);
   const LANGUAGE_OPTIONS = Object.values(LOCALES);
@@ -111,6 +112,10 @@
   let risDraft = null;
   let languagePickerController = null;
   let onboardingStep = hasCompletedOnboarding() ? null : 1;
+  let analyticsGeneration = 0;
+  let analyticsCommittedStateValid = true;
+  let analyticsHost = null;
+  let analyticsEvaluatedGeneration = -1;
 
   if(onboardingStep && state.intent){
     setOnboardingComplete();
@@ -168,6 +173,7 @@
     if(view==='wizard' && wizard)
       saveStep({trim:false});
 
+    invalidateAnalytics();
     currentLang=nextLanguage;
     localStorage.setItem(LANGUAGE_KEY,currentLang);
 
@@ -176,6 +182,196 @@
 
   function persist(){
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    analyticsCommittedStateValid=true;
+  }
+
+  function discardAnalyticsHost(host){
+    if(!ANALYTICS_ENABLED || !host) return;
+    if(analyticsHost===host) analyticsHost=null;
+    try{ host.replaceChildren(); }catch{}
+    try{ host.remove(); }catch{
+      try{ host.parentNode?.removeChild(host); }catch{}
+    }
+  }
+
+  function invalidateAnalytics(){
+    analyticsGeneration++;
+    if(!ANALYTICS_ENABLED) return;
+    discardAnalyticsHost(analyticsHost);
+  }
+
+  function invalidateAnalyticsForMutation(){
+    analyticsCommittedStateValid=false;
+    invalidateAnalytics();
+  }
+
+  // Read only own data descriptors: never invoke an accessor or coerce a body.
+  function analyticsFrozenData(value,prototype,keys,nonEnumerable=[]){
+    if(
+      value===null ||
+      (prototype===Object.prototype && (typeof value!=='object' || Array.isArray(value))) ||
+      (prototype===Array.prototype && !Array.isArray(value)) ||
+      (prototype===Function.prototype && typeof value!=='function') ||
+      Object.getPrototypeOf(value)!==prototype ||
+      !Object.isFrozen(value)
+    ) return null;
+
+    const descriptors=Object.getOwnPropertyDescriptors(value);
+    if(
+      Reflect.ownKeys(descriptors).length!==keys.length ||
+      !keys.every(key=>Object.hasOwn(descriptors,key))
+    ) return null;
+
+    const data=Object.create(null);
+    for(const key of keys){
+      const descriptor=descriptors[key];
+      if(
+        !Object.hasOwn(descriptor,'value') ||
+        descriptor.writable || descriptor.configurable ||
+        descriptor.enumerable!==!nonEnumerable.includes(key)
+      ) return null;
+      data[key]=descriptor.value;
+    }
+    return data;
+  }
+
+  function analyticsEvaluate(){
+    if(!ANALYTICS_ENABLED) return null;
+    const binding=Object.getOwnPropertyDescriptor(globalThis,'PHEISIRAETHA_ANALYTICS_V1');
+    if(
+      !binding || !Object.hasOwn(binding,'value') ||
+      binding.writable || binding.configurable || !binding.enumerable
+    ) return null;
+
+    const facade=analyticsFrozenData(binding.value,Object.prototype,['evaluate']);
+    if(!facade) return null;
+    const operation=analyticsFrozenData(facade.evaluate,Function.prototype,
+      ['length','name'],['length','name']);
+    return operation && operation.length===1 && operation.name==='evaluate'
+      ? facade.evaluate : null;
+  }
+
+  function validateAnalyticsDto(value){
+    const dto=analyticsFrozenData(value,Object.prototype,
+      ['dtoVersion','mode','lang','dir','components']);
+    if(
+      !dto || dto.dtoVersion!=='pheisiraetha-render-v1' ||
+      dto.lang!=='en' || dto.dir!=='ltr' ||
+      !['APPROVED_BUNDLE','FALLBACK_ONLY','UNAVAILABLE'].includes(dto.mode) ||
+      !Array.isArray(dto.components)
+    ) return null;
+
+    const length=Object.getOwnPropertyDescriptor(dto.components,'length');
+    if(!length || !Object.hasOwn(length,'value')) return null;
+    const count=length.value;
+    if(
+      dto.mode==='APPROVED_BUNDLE' ? ![5,9].includes(count) :
+      count!==(dto.mode==='FALLBACK_ONLY' ? 1 : 0)
+    ) return null;
+
+    const components=analyticsFrozenData(dto.components,Array.prototype,
+      ['length',...Array.from({length:count},(_,index)=>String(index))],['length']);
+    if(!components) return null;
+
+    const suffixes=['insight','why.values','why.selection','why.limitations','why.capability'];
+    const whyTemplates=[null,'safety.why.recordedInformationUsed','safety.why.ruleSelectionBasis',
+      'safety.why.recordedDataLimitations','safety.why.conditionAssessmentUnavailable'];
+    const texts=[];
+    for(let index=0;index<count;index++){
+      const component=analyticsFrozenData(components[index],Object.prototype,
+        ['componentId','surface','role','slot','templateId','templateVersion','text']);
+      if(
+        !component || component.templateVersion!==1 ||
+        !['componentId','surface','role','slot','templateId','text']
+          .every(key=>typeof component[key]==='string' && component[key].length>0)
+      ) return null;
+
+      if(dto.mode==='FALLBACK_ONLY'){
+        if(
+          component.componentId!=='fallback' || component.slot!=='fallback' ||
+          component.surface!=='FALLBACK' || component.role!=='FALLBACK' ||
+          component.templateId!=='safety.fallback.noInterpretationOrNextFocus'
+        ) return null;
+      }else{
+        const secondary=index>=5;
+        const position=secondary ? index-5 : index;
+        const slot=`${secondary ? 'secondary' : 'primary'}.${suffixes[position]}`;
+        if(
+          component.componentId!==slot || component.slot!==slot ||
+          component.surface!==(secondary ? 'SECONDARY' : 'PRIMARY') ||
+          component.role!==(position===0 ? 'INSIGHT' : 'WHY') ||
+          (position!==0 && component.templateId!==whyTemplates[position])
+        ) return null;
+      }
+      // Insight template IDs remain opaque; the trusted formatter owns the catalog.
+      texts.push(component.text);
+    }
+    return {mode:dto.mode,texts};
+  }
+
+  function analyticsTransactionCurrent(transaction){
+    if(!ANALYTICS_ENABLED) return false;
+    return (
+      analyticsCommittedStateValid && analyticsGeneration===transaction.generation &&
+      state===transaction.state && view==='home' && onboardingStep===null && state.intent!==null &&
+      analyticsHost===transaction.host &&
+      document.getElementById('app')===transaction.app && transaction.app.isConnected &&
+      transaction.host.isConnected && transaction.app.contains(transaction.host) &&
+      document.getElementById('analyticsHost')===transaction.host &&
+      transaction.app.querySelector(':scope > .shell > main > #analyticsHost')===transaction.host
+    );
+  }
+
+  function buildAnalyticsSubtree(dto){
+    if(!ANALYTICS_ENABLED || dto.mode==='UNAVAILABLE') return null;
+    const root=document.createElement('section');
+    root.className='card';
+    root.lang='en';
+    root.dir='ltr';
+    for(const text of dto.texts){
+      const paragraph=document.createElement('p');
+      paragraph.textContent=text;
+      root.appendChild(paragraph);
+    }
+    return root;
+  }
+
+  function renderAnalytics(transaction){
+    if(!ANALYTICS_ENABLED) return;
+    try{
+      if(!analyticsTransactionCurrent(transaction) ||
+        analyticsEvaluatedGeneration===transaction.generation) return;
+      const evaluate=analyticsEvaluate();
+      if(!evaluate || !analyticsTransactionCurrent(transaction)){
+        discardAnalyticsHost(transaction.host);
+        return;
+      }
+
+      // Lock this generation before the sole synchronous call, including reentrancy.
+      analyticsEvaluatedGeneration=transaction.generation;
+      const result=evaluate(state);
+      if(!analyticsTransactionCurrent(transaction)){
+        discardAnalyticsHost(transaction.host);
+        return;
+      }
+      const dto=validateAnalyticsDto(result);
+      if(!dto || !analyticsTransactionCurrent(transaction)){
+        discardAnalyticsHost(transaction.host);
+        return;
+      }
+
+      const subtree=buildAnalyticsSubtree(dto);
+      if(!analyticsTransactionCurrent(transaction)){
+        discardAnalyticsHost(transaction.host);
+        return;
+      }
+      if(subtree) transaction.host.replaceChildren(subtree);
+      else transaction.host.replaceChildren();
+      if(!analyticsTransactionCurrent(transaction)) discardAnalyticsHost(transaction.host);
+    }catch{
+      // A commit can throw after changing the host; clear and unmount it as well.
+      discardAnalyticsHost(transaction.host);
+    }
   }
 
   function hasCompletedOnboarding(){
@@ -353,6 +549,8 @@
   }
 
   function render(){
+    invalidateAnalytics();
+    const generation=analyticsGeneration;
     const app = document.getElementById('app');
 
     document.documentElement.lang=LOCALES[currentLang].htmlLang;
@@ -380,6 +578,34 @@
     // User text keeps its own writing direction regardless of the UI language.
     $$('#app textarea').forEach(field=>field.dir='auto');
     $$('#app input[type="number"]').forEach(field=>field.dir='ltr');
+
+    // Host construction belongs to render(), after the unchanged Home markup.
+    if(!ANALYTICS_ENABLED) return;
+    if(
+      generation!==analyticsGeneration || !analyticsCommittedStateValid ||
+      view!=='home' || onboardingStep!==null || state.intent===null
+    ) return;
+
+    let host=null;
+    try{
+      const main=app.querySelector(':scope > .shell > main');
+      const notice=main?.lastElementChild;
+      if(!notice?.matches('.notice.smalltext') || notice.textContent!==t('recommended')) return;
+      const committedState=state;
+      host=document.createElement('div');
+      host.id='analyticsHost';
+      host.lang='en';
+      host.dir='ltr';
+      if(generation!==analyticsGeneration || state!==committedState || !analyticsCommittedStateValid){
+        discardAnalyticsHost(host);
+        return;
+      }
+      analyticsHost=host;
+      main.insertBefore(host,notice);
+      renderAnalytics({generation,state:committedState,app,host});
+    }catch{
+      discardAnalyticsHost(host);
+    }
   }
 
   function renderAndFocusHeading(){
@@ -562,6 +788,7 @@
 
   function startWizard(){
 
+    invalidateAnalytics();
     const r = state.intent.ris;
 
     wizard = {
@@ -1102,6 +1329,7 @@
       b=>b.addEventListener(
         'click',
         ()=>{
+          invalidateAnalytics();
           view=b.dataset.nav;
           wizard=null;
           risDraft=null;
@@ -1113,6 +1341,7 @@
     $('#createGoal')?.addEventListener(
       'click',
       ()=>{
+        invalidateAnalytics();
         risDraft=risValues();
         view='ris';
         renderAndFocusHeading();
@@ -1122,6 +1351,7 @@
     $('#editGoal')?.addEventListener(
       'click',
       ()=>{
+        invalidateAnalytics();
         risDraft=risValues(state.intent?.ris);
         view='ris';
         renderAndFocusHeading();
@@ -1174,6 +1404,7 @@
 
         const existed=!!state.intent;
 
+        invalidateAnalyticsForMutation();
         if(!state.intent){
 
           state.intent={
@@ -1491,6 +1722,7 @@
           revision:{}
         };
 
+        invalidateAnalyticsForMutation();
         if(wizard.intentional==='yes'){
 
           wizard.selected.forEach(
@@ -1575,6 +1807,7 @@
           if(!isValidBackup(x))
             throw new Error();
 
+          invalidateAnalyticsForMutation();
           state=x;
 
           persist();
@@ -1598,9 +1831,11 @@
           confirm(t('deleteConfirm'))
         ){
 
+          invalidateAnalyticsForMutation();
           localStorage.removeItem(STORAGE_KEY);
 
           state=fresh();
+          analyticsCommittedStateValid=true;
 
           view='home';
 
