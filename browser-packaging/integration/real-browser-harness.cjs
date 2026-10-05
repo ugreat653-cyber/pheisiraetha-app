@@ -261,7 +261,9 @@ async function createFreshContext(browser, server, {
     if (!byRequest.has(request)) {
       const entry = { url: request.url(), method: request.method(),
         resourceType: request.resourceType(), blocked: false, transformed: false,
-        outcome: 'pending', status: null, error: null };
+        outcome: 'pending', status: null, error: null,
+        authenticatedShutdownCancellation: false, expectedTeardownAbort: false,
+        teardownAbortAttempted: false, teardownAbortCompleted: false };
       byRequest.set(request, entry);
       requests.push(entry);
     }
@@ -277,11 +279,15 @@ async function createFreshContext(browser, server, {
   function accountHandlerError(error, entry) {
     const message = error instanceof Error ? error.message : String(error);
     if (isShutdownCancellation(error)) {
-      if (entry) entry.shutdownCancellation = message;
-      return;
+      if (entry) {
+        entry.authenticatedShutdownCancellation = true;
+        entry.shutdownCancellation ??= message;
+      }
+      return 'authenticated-shutdown-cancellation';
     }
     if (entry) entry.error ??= message;
     failures.push(message);
+    return 'fatal';
   }
   function trackHandler(handler) {
     return resource => {
@@ -305,6 +311,14 @@ async function createFreshContext(browser, server, {
   function assertHealthy() {
     assert.deepEqual(failures, [], 'Private browser harness infrastructure failed');
     assert.deepEqual(server.requestLog.filter(entry => entry.error), [], 'Private HTTP server failed');
+    assert.equal(inFlight.size, 0, 'Route handlers must settle before request-failure classification');
+    // Final close calls this only after draining handlers. Both event orders
+    // therefore use the same completed per-request evidence, never errorText
+    // or shutdown timing alone. Raw failed outcomes/errors remain untouched.
+    assert.deepEqual(requests.filter(entry => !entry.blocked && entry.requestFailure &&
+      !(entry.authenticatedShutdownCancellation === true &&
+        entry.expectedTeardownAbort === true && entry.teardownAbortAttempted === true)), [],
+      'Unexpected non-blocked request failure');
     assert.deepEqual(requests.filter(entry => entry.transformed &&
       (entry.status !== 200 || entry.outcome !== 'finished' || entry.error !== null)), [],
       'Transformed app.js delivery requires terminal successful response evidence');
@@ -330,9 +344,8 @@ async function createFreshContext(browser, server, {
       entry.outcome = entry.blocked ? 'blocked' : 'failed';
       entry.requestFailure = request.failure()?.errorText || 'Request failed';
       entry.error ??= entry.requestFailure;
-      // errorText does not authenticate a shutdown cause. In particular,
-      // ERR_ABORTED/ERR_FAILED alone must never exempt a non-blocked failure.
-      if (!entry.blocked) failures.push(`${entry.method} ${entry.url}: ${entry.requestFailure}`);
+      // Record raw evidence first. Authentication/teardown may arrive later;
+      // final health classifies the entry after all handlers have drained.
     });
     // HTTP routing does not cover WebSockets. Never connect these to a server.
     assert.equal(typeof context.routeWebSocket, 'function', 'Playwright WebSocket routing is required');
@@ -373,9 +386,19 @@ async function createFreshContext(browser, server, {
           await route.continue();
         }
       } catch (error) {
-        accountHandlerError(error, entry);
-        try { await route.abort('failed'); }
-        catch (abortError) { accountHandlerError(abortError, entry); }
+        const classification = accountHandlerError(error, entry);
+        if (!entry.blocked && classification === 'authenticated-shutdown-cancellation') {
+          entry.expectedTeardownAbort = true;
+          entry.teardownAbortCause = error.message;
+        }
+        entry.teardownAbortAttempted = true;
+        try {
+          await route.abort('failed');
+          entry.teardownAbortCompleted = true;
+        } catch (abortError) {
+          entry.teardownAbortError = abortError instanceof Error ? abortError.message : String(abortError);
+          accountHandlerError(abortError, entry);
+        }
       }
     }));
     if (analyticsEnabled) await context.addInitScript({ content: artifact.toString('utf8') });
