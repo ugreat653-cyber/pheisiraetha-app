@@ -228,7 +228,7 @@ async function launchChromium() {
     playwright = require(path.join(process.env.CODEX_PRIMARY_RUNTIME_NODE_MODULES, 'playwright'));
   }
   const explicitPath = process.env.LEGACY_DOM_CHROMIUM_EXECUTABLE_PATH;
-  const executablePath = explicitPath ? path.resolve(explicitPath) : playwright.chromium.executablePath();
+  const executablePath = path.resolve(explicitPath ?? playwright.chromium.executablePath());
   try {
     fs.accessSync(executablePath, process.platform === 'win32' ? fs.constants.F_OK : fs.constants.X_OK);
     assert.ok(fs.statSync(executablePath).isFile(), 'Chromium executable must be a file');
@@ -236,7 +236,7 @@ async function launchChromium() {
     throw new Error(`No usable installed Chromium executable: ${executablePath}`, { cause });
   }
   try {
-    return await playwright.chromium.launch({ headless: true, ...(explicitPath ? { executablePath } : {}) });
+    return await playwright.chromium.launch({ headless: true, executablePath });
   } catch (cause) {
     throw new Error(`Installed Playwright Chromium failed to launch: ${executablePath}`, { cause });
   }
@@ -254,7 +254,9 @@ async function createFreshContext(browser, server, {
     ...(viewport === undefined ? {} : { viewport })
   });
   const requests = [], failures = [], byRequest = new WeakMap();
-  let closing = false, closePromise;
+  const inFlight = new Set();
+  const shutdownReason = 'PHEISIRAETHA private browser harness intentional context shutdown';
+  let shutdownStarted = false, closePromise;
   function record(request) {
     if (!byRequest.has(request)) {
       const entry = { url: request.url(), method: request.method(),
@@ -265,9 +267,59 @@ async function createFreshContext(browser, server, {
     }
     return byRequest.get(request);
   }
+  function isShutdownCancellation(error) {
+    // Timing alone cannot identify cancellation. Require Playwright's specific
+    // closed-target error class AND the reason passed to this context's close.
+    return shutdownStarted && error instanceof Error &&
+      /^TargetClosedError\d*$/.test(error.constructor.name) &&
+      error.message.includes(shutdownReason);
+  }
+  function accountHandlerError(error, entry) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (isShutdownCancellation(error)) {
+      if (entry) entry.shutdownCancellation = message;
+      return;
+    }
+    if (entry) entry.error ??= message;
+    failures.push(message);
+  }
+  function trackHandler(handler) {
+    return resource => {
+      // Schedule work after registration so even a synchronous callback fault
+      // belongs to a tracked task. The catch also accounts unexpected escapes.
+      const task = Promise.resolve().then(() => handler(resource))
+        .catch(error => accountHandlerError(error))
+        .finally(() => inFlight.delete(task));
+      inFlight.add(task);
+      return task;
+    };
+  }
+  async function drainHandlers() {
+    while (inFlight.size) {
+      const settled = await Promise.allSettled([...inFlight]);
+      for (const result of settled) {
+        if (result.status === 'rejected') accountHandlerError(result.reason);
+      }
+    }
+  }
   function assertHealthy() {
     assert.deepEqual(failures, [], 'Private browser harness infrastructure failed');
     assert.deepEqual(server.requestLog.filter(entry => entry.error), [], 'Private HTTP server failed');
+    assert.deepEqual(requests.filter(entry => entry.transformed &&
+      (entry.status !== 200 || entry.outcome !== 'finished' || entry.error !== null)), [],
+      'Transformed app.js delivery requires terminal successful response evidence');
+  }
+  function closeAndDrain() {
+    if (!closePromise) {
+      shutdownStarted = true;
+      closePromise = (async () => {
+        try { await context.close({ reason: shutdownReason }); }
+        catch (error) { accountHandlerError(error); }
+        finally { await drainHandlers(); }
+        assertHealthy();
+      })();
+    }
+    return closePromise;
   }
   try {
     context.on('request', record);
@@ -276,18 +328,22 @@ async function createFreshContext(browser, server, {
     context.on('requestfailed', request => {
       const entry = record(request);
       entry.outcome = entry.blocked ? 'blocked' : 'failed';
-      entry.error = request.failure()?.errorText || 'Request failed';
+      entry.requestFailure = request.failure()?.errorText || 'Request failed';
+      entry.error ??= entry.requestFailure;
+      // errorText does not authenticate a shutdown cause. In particular,
+      // ERR_ABORTED/ERR_FAILED alone must never exempt a non-blocked failure.
+      if (!entry.blocked) failures.push(`${entry.method} ${entry.url}: ${entry.requestFailure}`);
     });
     // HTTP routing does not cover WebSockets. Never connect these to a server.
     assert.equal(typeof context.routeWebSocket, 'function', 'Playwright WebSocket routing is required');
-    await context.routeWebSocket(/.*/, async socket => {
+    await context.routeWebSocket(/.*/, trackHandler(async socket => {
       const entry = { url: socket.url(), method: 'GET', resourceType: 'websocket',
         blocked: true, transformed: false, outcome: 'blocked', status: null, error: null };
       requests.push(entry);
       try { await socket.close({ code: 1008, reason: 'Private harness blocks network sockets' }); }
-      catch (error) { if (!closing) { entry.error = error.message; failures.push(error.message); } }
-    });
-    await context.route('**/*', async route => {
+      catch (error) { accountHandlerError(error, entry); }
+    }));
+    await context.route('**/*', trackHandler(async route => {
       const request = route.request(), entry = record(request);
       try {
         const url = new URL(request.url());
@@ -304,40 +360,35 @@ async function createFreshContext(browser, server, {
             assert.deepEqual(source, fs.readFileSync(path.join(ROOT, 'app.js')),
               'Only the exact working-tree app.js response may be transformed');
             const enabled = enableAppJs(source);
-            Object.assign(entry, assertEnabledAppTransformation(source, enabled), { transformed: true });
+            Object.assign(entry, assertEnabledAppTransformation(source, enabled), { transformationPrepared: true });
             await route.fulfill({ response, body: enabled,
               headers: { ...response.headers(), 'content-length': String(enabled.length) } });
+            entry.transformed = true;
           } finally {
-            await response.dispose();
+            // Cleanup must not replace an earlier assertion/fulfillment error.
+            try { await response.dispose(); }
+            catch (error) { accountHandlerError(error, entry); }
           }
         } else {
           await route.continue();
         }
       } catch (error) {
-        if (!closing) {
-          entry.error = error.message;
-          failures.push(error.message);
-        }
-        try { await route.abort('failed'); } catch { /* Context may already be closing. */ }
+        accountHandlerError(error, entry);
+        try { await route.abort('failed'); }
+        catch (abortError) { accountHandlerError(abortError, entry); }
       }
-    });
+    }));
     if (analyticsEnabled) await context.addInitScript({ content: artifact.toString('utf8') });
   } catch (error) {
-    closing = true;
-    await context.close();
+    try { await closeAndDrain(); }
+    catch (cleanupError) { throw new AggregateError([error, cleanupError], 'Context setup and cleanup failed'); }
     throw error;
   }
   return Object.freeze({
     context, origin: server.origin,
     get requestLog() { return copyLog(requests); },
     assertHealthy,
-    close() {
-      if (!closePromise) {
-        closing = true;
-        closePromise = (async () => { await context.close(); assertHealthy(); })();
-      }
-      return closePromise;
-    }
+    close: closeAndDrain
   });
 }
 
