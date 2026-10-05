@@ -632,7 +632,9 @@ function assertNoRawLeak(app) {
     if (node.nodeType === 3 || node.nodeType === 8) surfaces.push(node.data);
     for (const attribute of node.attributes) surfaces.push(attribute.name, attribute.value);
   }
-  surfaces.push(...app.document.events.flatMap(event => event.surfaces));
+  for (const event of app.document.events)
+    for (const surface of event.surfaces)
+      surfaces.push(surface);
   surfaces.push(JSON.stringify(app.logs), ...app.alerts);
   for (const marker of Object.values(RAW))
     assert.equal(surfaces.some(value => value.includes(marker)), false, 'No nonpublic raw source/engine/debug sentinel: ' + marker);
