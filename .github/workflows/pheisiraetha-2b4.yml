@@ -1,0 +1,112 @@
+name: PHEISIRAETHA private 2B-4 qualification
+on:
+  pull_request:
+    branches: [phase2b-3b6-s3-verifier]
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'release/**'
+      - '.github/workflows/pheisiraetha-2b4.yml'
+permissions:
+  contents: read
+concurrency:
+  group: pheisiraetha-2b4-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+jobs:
+  private-release:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      CHROME_VERSION_EXTRA: stable
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select exact Node
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903
+        with:
+          node-version: 24.19.0
+          package-manager-cache: false
+      - name: Prepare external browser driver
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools="$RUNNER_TEMP/pheisiraetha-2b4-tools"
+          mkdir -p "$tools"
+          npm install --prefix "$tools" --no-save --ignore-scripts --no-audit --no-fund --package-lock=false playwright@1.62.1
+      - name: Build and qualify private OFF release
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NODE_PATH="$RUNNER_TEMP/pheisiraetha-2b4-tools/node_modules"
+          export PHEISIRAETHA_2B4_EVIDENCE="$RUNNER_TEMP/pheisiraetha-2b4-evidence"
+          export PHEISIRAETHA_2B4_OUTPUT="$RUNNER_TEMP/pheisiraetha-2b4-release"
+          export LEGACY_DOM_CHROMIUM_EXECUTABLE_PATH=/opt/google/chrome/chrome
+          node --check release/build.cjs
+          node --check release/worker-template.js
+          node --check release/lifecycle.test.cjs
+          node release/build.cjs "$PHEISIRAETHA_2B4_OUTPUT" offline-candidate-01
+          node --test --test-reporter=spec release/lifecycle.test.cjs
+          node - <<'NODE'
+          'use strict';
+          const a = require('node:assert/strict');
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const {createHash} = require('node:crypto');
+          const {execFileSync} = require('node:child_process');
+          const SOURCE = '7e583ac695be2b213d25591deab430664e682988';
+          const LEGACY = '255a5d9d27461dcacaebc1bc80ab322dd54b4de8';
+          const ids = ['OFF-01','INSTALL-01','FETCH-01','HASH-01','QUOTA-01','COLD-00','COLD-01','WARM-01','CACHE-01','MIX-01','MIX-02','UPGRADE-01','DIGEST-01','ON-01','STORE-01','ROLLBACK-01'];
+          const read = file => JSON.parse(fs.readFileSync(file, 'utf8'));
+          const hash = bytes => createHash('sha256').update(bytes).digest('hex');
+          const canonical = value => Array.isArray(value) ? `[${value.map(canonical).join(',')}]` : value && typeof value === 'object' ? `{${Object.keys(value).sort().map(k => `${JSON.stringify(k)}:${canonical(value[k])}`).join(',')}}` : JSON.stringify(value);
+          const git = args => execFileSync('git', ['--no-optional-locks', ...args], {env: {...process.env, GIT_NO_REPLACE_OBJECTS: '1', GIT_OPTIONAL_LOCKS: '0'}});
+          const r = read(path.join(process.env.PHEISIRAETHA_2B4_EVIDENCE, 'matrix.json'));
+          const publication = read(path.join(process.env.PHEISIRAETHA_2B4_OUTPUT, 'release-inventory.json'));
+          a.equal(process.version, 'v24.19.0');
+          a.equal(require('playwright/package.json').version, '1.62.1');
+          a.equal(r.status, 'PASS');
+          a.equal(r.candidateCommit, git(['rev-parse','HEAD']).toString().trim());
+          a.ok(Array.isArray(r.rows) && Array.isArray(r.extras));
+          a.deepEqual(r.rows.map(row => row.id).sort(), [...ids].sort());
+          const all = [...r.rows, ...r.extras];
+          a.equal(new Set(all.map(row => row.id)).size, all.length);
+          for (const row of all) {a.equal(row.status, 'PASS'); a.ok(row.witnesses && typeof row.witnesses === 'object' && !Array.isArray(row.witnesses) && Object.keys(row.witnesses).length > 0);}
+          a.ok(Number.isSafeInteger(r.tests) && r.tests >= ids.length);
+          a.equal(r.skipped, 0); a.equal(r.todo, 0);
+          a.equal(r.productionOFF, true); a.equal(r.frozenUnchanged, true);
+          a.equal(r.releaseDigest, publication.releaseDigest);
+          a.equal(publication.releaseDigest, hash(canonical(publication.inventory)));
+          a.equal(publication.inventory.scope, 'PRODUCTION_DEFAULT_OFF');
+          const p = publication.inventory.provenance;
+          a.equal(p.integrationCommit, SOURCE); a.equal(p.productionCommit, LEGACY);
+          a.equal(p.sourceFlag, 'OFF'); a.equal(p.fixtureFlag, null);
+          a.equal(p.dtoVersion, 'pheisiraetha-render-v1'); a.equal(p.safetyPolicy, 'safety-v1'); a.equal(p.registryVersion, 'safety-registry-v1');
+          const manifestBytes = git(['show', `${SOURCE}:browser-packaging/build-manifest.json`]);
+          a.equal(p.buildManifestSha256, hash(manifestBytes)); a.deepEqual(p.frozenInputs, JSON.parse(manifestBytes).inputs);
+          a.equal(p.sourceAppSha256, hash(git(['show', `${SOURCE}:app.js`])));
+          a.equal(p.entrySha256, hash(git(['show', `${SOURCE}:browser-packaging/entry.cjs`])));
+          a.equal(r.browser.path, fs.realpathSync(process.env.LEGACY_DOM_CHROMIUM_EXECUTABLE_PATH));
+          a.match(r.browser.sha256Before, /^[a-f0-9]{64}$/);
+          a.equal(r.browser.sha256Before, r.browser.sha256After);
+          a.equal(r.browser.sha256After, hash(fs.readFileSync(r.browser.path)));
+          const functions = ['evaluate','analyze','assessPresentation'];
+          const off = r.rows.find(row => row.id === 'OFF-01');
+          for (const name of functions) a.equal(off.witnesses.counts[name], 0);
+          for (const id of ['ON-VALID-5','ON-VALID-9','ON-VALID-FALLBACK']) {const row = r.extras.find(item => item.id === id); a.ok(row, id); for (const name of functions) a.ok(Number.isSafeInteger(row.witnesses.counts[name]) && row.witnesses.counts[name] > 0, `${id}:${name}`);}
+          console.log(JSON.stringify({machineGate: 'PASS',verifiedInventoryDigest: publication.releaseDigest,frozenSource: SOURCE,matrix: r}, null, 2));
+          NODE
+      - name: Preserve candidate and qualification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pheisiraetha-2b4-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/pheisiraetha-2b4-evidence/
+            ${{ runner.temp }}/pheisiraetha-2b4-release/
+          if-no-files-found: warn
+          retention-days: 14
