@@ -1,0 +1,202 @@
+name: PHEISIRAETHA independent browser verification
+on:
+  pull_request:
+    branches: [phase2b-4-pages-transport, main]
+    types: [opened, synchronize, reopened, labeled]
+permissions:
+  contents: read
+concurrency:
+  group: pheisiraetha-independent-verification-${{ github.event.pull_request.number }}-${{ github.event.action }}
+  cancel-in-progress: false
+env:
+  LEGACY_DOM_CHROMIUM_EXECUTABLE_PATH: /opt/google/chrome/chrome
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+jobs:
+  fixture:
+    name: fixture (${{ matrix.mode }})
+    if: >-
+      github.event.action != 'labeled' &&
+      github.repository == 'ugreat653-cyber/pheisiraetha-app' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'phase2b-4-live-verification'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [ON, ROLLBACK]
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout only the isolated verification head
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Use the previously qualified Node
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903
+        with:
+          node-version: '24.19.0'
+      - name: Recover exact existing Chrome and external Playwright
+        env:
+          NODE_PATH: ${{ runner.temp }}/pheisiraetha-live-tools/node_modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "92d1aec6c60326fc576c6fe1ae72eeeb9c1ae87f65966a5c480397319cf8dd8f  docs/phase2b-4/verify-pages-archive.py" | sha256sum -c -
+          git show 7e583ac695be2b213d25591deab430664e682988:browser-packaging/runtime-core/fixtures.cjs > "$RUNNER_TEMP/qualified-fixtures.cjs"
+          echo "79c91d9164e557962bf9234e1fb42ea380e6705d99cbfa6d7719a119d628025f  $RUNNER_TEMP/qualified-fixtures.cjs" | sha256sum -c -
+          test "$(node --version)" = "v24.19.0"
+          test -x "$LEGACY_DOM_CHROMIUM_EXECUTABLE_PATH"
+          echo "6c792041b07547a662e1b17974d1dc34a3db630379b45d9d89ddd7e3e68cc587  $LEGACY_DOM_CHROMIUM_EXECUTABLE_PATH" | sha256sum -c -
+          "$LEGACY_DOM_CHROMIUM_EXECUTABLE_PATH" --version | tee "$RUNNER_TEMP/chrome-version.txt"
+          grep -F "154.0.8037.97" "$RUNNER_TEMP/chrome-version.txt"
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --prefix "$RUNNER_TEMP/pheisiraetha-live-tools" --no-save --ignore-scripts --no-audit --no-fund --package-lock=false playwright@1.62.1
+          node --check docs/phase2b-4/live-verification.cjs
+          node --check docs/phase2b-4/live-release-control.cjs
+          node docs/phase2b-4/live-release-control.cjs --self-test
+      - name: Copy exact approved archived overlay without rebuilding
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODE: ${{ matrix.mode }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B docs/phase2b-4/verify-pages-archive.py "$MODE" "$RUNNER_TEMP/pages-$MODE"
+      - name: Prove new verification mechanism on unchanged candidate
+        env:
+          NODE_PATH: ${{ runner.temp }}/pheisiraetha-live-tools/node_modules
+          MODE: ${{ matrix.mode }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node docs/phase2b-4/live-verification.cjs --overlay "$RUNNER_TEMP/pages-$MODE" --mode "$MODE" --evidence "$RUNNER_TEMP/live-evidence-$MODE" --fixtures "$RUNNER_TEMP/qualified-fixtures.cjs" --fixture-server --self-test
+      - name: Preserve complete browser witnesses even on failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pheisiraetha-live-verification-fixture-${{ matrix.mode }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/live-evidence-${{ matrix.mode }}/
+          if-no-files-found: warn
+          retention-days: 14
+  live:
+    name: future approved live ON and conditional full OFF rollback
+    if: >-
+      github.event.action == 'labeled' &&
+      github.event.label.name == 'pheisiraetha-live-on-approved' &&
+      github.actor == 'ugreat653-cyber' &&
+      github.repository == 'ugreat653-cyber/pheisiraetha-app' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'phase2b-4-live-verification' &&
+      github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: write
+      pages: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERIFICATION_HEAD: ${{ github.event.pull_request.head.sha }}
+      NODE_PATH: ${{ runner.temp }}/pheisiraetha-live-tools/node_modules
+    steps:
+      - name: Checkout only the independently proven verification head
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Use exact Node
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903
+        with:
+          node-version: '24.19.0'
+      - name: Require exact proven head, approved PR4 merge and successful ON publication
+        id: preflight
+        run: node docs/phase2b-4/live-release-control.cjs preflight --evidence "$RUNNER_TEMP/live-control"
+      - name: Recover exact existing Chrome and external Playwright
+        id: runtime
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "92d1aec6c60326fc576c6fe1ae72eeeb9c1ae87f65966a5c480397319cf8dd8f  docs/phase2b-4/verify-pages-archive.py" | sha256sum -c -
+          git show 7e583ac695be2b213d25591deab430664e682988:browser-packaging/runtime-core/fixtures.cjs > "$RUNNER_TEMP/qualified-fixtures.cjs"
+          echo "79c91d9164e557962bf9234e1fb42ea380e6705d99cbfa6d7719a119d628025f  $RUNNER_TEMP/qualified-fixtures.cjs" | sha256sum -c -
+          test "$(node --version)" = "v24.19.0"
+          test -x "$LEGACY_DOM_CHROMIUM_EXECUTABLE_PATH"
+          echo "6c792041b07547a662e1b17974d1dc34a3db630379b45d9d89ddd7e3e68cc587  $LEGACY_DOM_CHROMIUM_EXECUTABLE_PATH" | sha256sum -c -
+          "$LEGACY_DOM_CHROMIUM_EXECUTABLE_PATH" --version | tee "$RUNNER_TEMP/chrome-version.txt"
+          grep -F "154.0.8037.97" "$RUNNER_TEMP/chrome-version.txt"
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --prefix "$RUNNER_TEMP/pheisiraetha-live-tools" --no-save --ignore-scripts --no-audit --no-fund --package-lock=false playwright@1.62.1
+          node --check docs/phase2b-4/live-verification.cjs
+          node --check docs/phase2b-4/live-release-control.cjs
+          node docs/phase2b-4/live-release-control.cjs --self-test
+      - name: Revalidate original ZIP and copy complete preserved ON and rollback
+        id: archive
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B docs/phase2b-4/verify-pages-archive.py ON "$RUNNER_TEMP/pages-ON"
+          python3 -B docs/phase2b-4/verify-pages-archive.py ROLLBACK "$RUNNER_TEMP/pages-ROLLBACK"
+      - name: Independently verify actual public ON bytes and fresh Chrome behavior
+        id: on
+        if: steps.runtime.outcome == 'success' && steps.archive.outcome == 'success'
+        continue-on-error: true
+        run: >-
+          node docs/phase2b-4/live-verification.cjs
+          --overlay "$RUNNER_TEMP/pages-ON" --mode ON
+          --evidence "$RUNNER_TEMP/live-evidence-ON"
+          --fixtures "$RUNNER_TEMP/qualified-fixtures.cjs"
+          --url https://ugreat653-cyber.github.io/pheisiraetha-app/
+      - name: Automatic previously approved complete OFF rollback on verification failure
+        id: rollback
+        if: >-
+          always() && !cancelled() &&
+          steps.preflight.outputs.rollback_eligible == 'true' &&
+          (steps.runtime.outcome == 'failure' || steps.archive.outcome == 'failure' || steps.on.outcome == 'failure')
+        continue-on-error: true
+        env:
+          LIVE_ON_VERIFICATION_FAILED: 'true'
+        run: node docs/phase2b-4/live-release-control.cjs rollback --evidence "$RUNNER_TEMP/live-control"
+      - name: Independently verify actual complete OFF rollback in fresh Chrome
+        id: off
+        if: steps.rollback.outputs.rollback_published == 'true' && steps.runtime.outcome == 'success' && steps.archive.outcome == 'success'
+        continue-on-error: true
+        run: >-
+          node docs/phase2b-4/live-verification.cjs
+          --overlay "$RUNNER_TEMP/pages-ROLLBACK" --mode ROLLBACK
+          --evidence "$RUNNER_TEMP/live-evidence-ROLLBACK"
+          --fixtures "$RUNNER_TEMP/qualified-fixtures.cjs"
+          --url https://ugreat653-cyber.github.io/pheisiraetha-app/
+      - name: Record exact controlled release result
+        if: always()
+        env:
+          PREFLIGHT: ${{ steps.preflight.outcome }}
+          ON_RESULT: ${{ steps.on.outcome }}
+          ROLLBACK_RESULT: ${{ steps.rollback.outcome }}
+          OFF_RESULT: ${{ steps.off.outcome }}
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs=require('node:fs'),p=require('node:path');
+          const status=process.env.PREFLIGHT!=='success'?'RELEASE_BLOCKED':process.env.ON_RESULT==='success'?'PUBLIC_ON_VERIFIED':process.env.ROLLBACK_RESULT==='success'&&process.env.OFF_RESULT==='success'?'PUBLIC_OFF_ROLLBACK_VERIFIED':'CRITICAL_RELEASE_INCIDENT';
+          const dir=p.join(process.env.RUNNER_TEMP,'live-result');fs.mkdirSync(dir);
+          const record={status,repository:'ugreat653-cyber/pheisiraetha-app',verificationHead:process.env.VERIFICATION_HEAD,runID:Number(process.env.GITHUB_RUN_ID),sourceArtifact:11580506475,sourceZipSha256:'85bfe111a96f0e9773d505cbebe3d4750c4320f00eec6a370ce86147c33766b8',preflight:process.env.PREFLIGHT,on:process.env.ON_RESULT,rollback:process.env.ROLLBACK_RESULT,off:process.env.OFF_RESULT,remainingReproducibilityRisk:'REPRODUCIBILITY_RISK_OPEN',existingClients:'Natural worker replacement requires previous open clients to close or reload.'};
+          fs.writeFileSync(p.join(dir,'PHEISIRAETHA_PUBLIC_RELEASE_RESULT.json'),JSON.stringify(record,null,2)+'\n');console.log(JSON.stringify(record));
+          if(status==='CRITICAL_RELEASE_INCIDENT'||status==='RELEASE_BLOCKED')process.exitCode=1;
+          NODE
+      - name: Preserve full actual live and rollback evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pheisiraetha-independent-public-release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/live-control/
+            ${{ runner.temp }}/live-evidence-ON/
+            ${{ runner.temp }}/live-evidence-ROLLBACK/
+            ${{ runner.temp }}/live-result/
+          if-no-files-found: warn
+          retention-days: 14
