@@ -99,6 +99,15 @@ function assemble({legacy,candidate,workerTemplate,buildManifestBytes,entryBytes
   assert.ok(!/url\s*\(/i.test(candidate.get('app.css').toString('utf8')),'Relative CSS resources require an explicit release design');
   const files=new Map(legacy),assets=new Map();
   for(const url of LEGACY_URLS) assets.set(url,legacy.get(url.split('?')[0]));
+
+  const bootstrapIntegrity=bytes=>`sha256-${createHash('sha256').update(bytes).digest('base64')}`;
+  const legacyScript=file=>`<script src="${file}" integrity="${bootstrapIntegrity(legacy.get(file))}" crossorigin="anonymous"></script>`;
+  let bootstrap=legacy.get('index.html').toString('utf8');
+  bootstrap=replaceOnce(bootstrap,'<link rel="stylesheet" href="app.css" />',`<link rel="stylesheet" href="app.css" integrity="${bootstrapIntegrity(legacy.get('app.css'))}" crossorigin="anonymous" />`);
+  for(const file of ['launch.js','locales.js','app.js']) bootstrap=replaceOnce(bootstrap,`<script src="${file}"></script>`,legacyScript(file));
+  const bootstrapBytes=Buffer.from(bootstrap);
+  files.set('index.html',bootstrapBytes); assets.set('index.html',bootstrapBytes);
+
   const aliases=new Map();
   for(const file of ['app.css','launch.js','locales.js','app.js']) {
     const bytes=candidate.get(file),ext=path.posix.extname(file),name=file.slice(0,-ext.length);
@@ -121,7 +130,7 @@ function assemble({legacy,candidate,workerTemplate,buildManifestBytes,entryBytes
   const assetRecords=[...assets].map(([url,bytes])=>({url,sha256:sha256(bytes),sizeBytes:bytes.length,mime:mime(url)})).sort((a,b)=>a.url<b.url?-1:a.url>b.url?1:0);
   const inventory={format:'pheisiraetha-offline-release-v1',generation,scope:privateFixture?'PRIVATE_TEST_FIXTURE':'PRODUCTION_DEFAULT_OFF',
     baselineCache:'pheisiraetha-v16',entryURL,workerTemplateSha256:sha256(workerTemplate),provenance:{productionCommit:LEGACY,
-      integrationCommit:SOURCE,integrationAppBlob:APP_BLOB,sourceAppSha256,frozenSourceTreeSha256,legacyWorkerSha256,
+      integrationCommit:SOURCE,integrationAppBlob:APP_BLOB,sourceAppSha256,frozenSourceTreeSha256,legacyWorkerSha256,legacyEntrySha256:sha256(legacy.get('index.html')),bootstrapEntrySha256:sha256(bootstrapBytes),
       entrySha256:sha256(entryBytes),buildManifestSha256:sha256(buildManifestBytes),frozenInputs:manifest.inputs,
       safetyPolicy:'safety-v1',registryVersion:'safety-registry-v1',registryCommit:manifest.frozenRegistryCommit,
       dtoVersion:'pheisiraetha-render-v1',sourceFlag:'OFF',fixtureFlag:privateFixture?flags[0]:null},assets:assetRecords};
@@ -129,7 +138,18 @@ function assemble({legacy,candidate,workerTemplate,buildManifestBytes,entryBytes
 }
 function rollbackRelease(previous,generation) {
   assert.match(generation,/^rollback-[0-9]{2,}$/); assert.notEqual(generation,previous.inventory.generation);
-  for(const asset of previous.inventory.assets) { const bytes=previous.assets.get(asset.url); assert.equal(bytes.length,asset.sizeBytes); assert.equal(sha256(bytes),asset.sha256); }
+
+  assert.equal(previous.releaseDigest,sha256(canonical(previous.inventory)),'Prior inventory digest');
+  assert.equal(previous.cacheName,`pheisiraetha-release-${previous.inventory.generation}-${previous.releaseDigest}`,'Prior cache identity');
+  assert.equal(previous.inventory.workerTemplateSha256,sha256(previous.workerTemplate),'Prior worker template');
+  const previousConfig={inventory:previous.inventory,releaseDigest:previous.releaseDigest,cacheName:previous.cacheName};
+  assert.deepEqual(previous.worker,Buffer.from(previous.workerTemplate.toString('utf8').replace(PIN,JSON.stringify(previousConfig))),'Prior worker pin');
+  assert.deepEqual(previous.entry,previous.assets.get(previous.entryURL),'Prior entry identity');
+  const priorMetadata=JSON.parse(previous.files.get('release-inventory.json'));
+  assert.equal(priorMetadata.releaseDigest,previous.releaseDigest);
+  assert.deepEqual(priorMetadata.inventory,previous.inventory);
+
+  for(const asset of previous.inventory.assets) { const bytes=previous.assets.get(asset.url); assert.equal(bytes.length,asset.sizeBytes); assert.equal(sha256(bytes),asset.sha256); assert.deepEqual(previous.files.get(asset.url.split('?')[0]),bytes); }
   return finish({files:new Map(previous.files),assets:new Map(previous.assets),entry:previous.entry,entryURL:previous.entryURL,
     workerTemplate:previous.workerTemplate,inventory:{...previous.inventory,generation}});
 }
