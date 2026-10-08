@@ -70,6 +70,7 @@ async function main() {
     } catch(error) {rejected.push({path:file,reason:error.message});}
   }
   save('qualification.json',{node:process.version,platform:process.platform,tools,selected,rejected});
+  console.log(fs.readFileSync(path.join(evidence,'qualification.json'),'utf8'));
   assert.ok(selected,'ENVIRONMENT_BLOCKED_NO_USABLE_CHROMIUM');
   const out = fs.openSync(path.join(evidence,'verifier.stdout'),'w');
   const err = fs.openSync(path.join(evidence,'verifier.stderr'),'w');
@@ -79,6 +80,8 @@ async function main() {
       {cwd:source,env:{...env,LEGACY_DOM_CHROMIUM_EXECUTABLE_PATH:selected.path},
       stdio:['ignore',out,err],timeout:20*60*1000});
   } finally {fs.closeSync(out);fs.closeSync(err);}
+  process.stdout.write(fs.readFileSync(path.join(evidence,'verifier.stdout'),'utf8'));
+  process.stderr.write(fs.readFileSync(path.join(evidence,'verifier.stderr'),'utf8'));
   save('process.json',{status:result.status,signal:result.signal,error:result.error?.message});
   assert.equal(result.error,undefined);
   assert.equal(result.status,0);
