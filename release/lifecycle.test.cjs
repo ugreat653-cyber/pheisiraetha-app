@@ -48,19 +48,28 @@ async function environment(source=mf4){
 async function closeServer(server){server.closeAllConnections();await bounded(new Promise(resolve=>server.close(resolve)),5000);}
 async function dispose(s){try{if(s.context)await bounded(s.context.close(),10000);}finally{await closeServer(s.server);}}
 async function normal(p,s){await p.goto(s.origin+'/');await p.waitForFunction(()=>!document.body.classList.contains('is-launching'));assert.equal(await p.locator('#startCheckin').isVisible(),true);}
+async function registrationState(p,kind){return bounded(p.evaluate(async kind=>{
+ const deadline=Date.now()+30000;
+ for(;;){const r=await navigator.serviceWorker.getRegistration(),worker=kind==='waiting'?r?.waiting:r?.active,wanted=kind==='waiting'?'installed':'activated';
+  if(worker?.state===wanted)return {kind,state:worker.state,scriptURL:worker.scriptURL};
+  if(Date.now()>=deadline)throw Error('Registration state timeout: '+kind);
+  await new Promise(resolve=>setTimeout(resolve,20));
+ }
+},kind),31000);}
 async function legacy(s){
  await normal(s.page,s);
- await s.page.waitForFunction(async()=>{const r=await navigator.serviceWorker.getRegistration();return Boolean(navigator.serviceWorker.controller&&r?.active?.state==='activated');});
+ await s.page.waitForFunction(()=>Boolean(navigator.serviceWorker.controller));await registrationState(s.page,'active');
  const assets=primary.inventory.assets.filter(a=>inputs.legacy.has(a.url.split('?')[0])).map(a=>{const bytes=inputs.legacy.get(a.url.split('?')[0]);return {url:a.url,sha256:sha256(bytes),sizeBytes:bytes.length};});
+ assets.unshift({url:'./',sha256:sha256(inputs.legacy.get('index.html')),sizeBytes:inputs.legacy.get('index.html').length});
  s.legacyWitness=await s.page.evaluate(async assets=>{const names=await caches.keys();if(!names.includes('pheisiraetha-v16'))throw Error('Established v16 cache missing');const c=await caches.open('pheisiraetha-v16');for(const a of assets){const response=await c.match(new URL(a.url,location.origin+'/'));if(!response)throw Error('Established v16 asset missing: '+a.url);const bytes=await response.arrayBuffer(),hash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(x=>x.toString(16).padStart(2,'0')).join('');if(bytes.byteLength!==a.sizeBytes||hash!==a.sha256)throw Error('Established v16 asset identity: '+a.url);}const r=await navigator.serviceWorker.getRegistration();return {cacheName:'pheisiraetha-v16',verifiedAssetCount:assets.length,activeState:r.active.state,controllerURL:navigator.serviceWorker.controller.scriptURL,cacheNamesBeforeCandidate:names};},assets);
  assert.equal(s.legacyWitness.activeState,'activated');
 }
 function publish(s,r){const bootstrap=r.files.get('index.html');assert.equal(bootstrap.toString().replace(/ integrity="sha256-[^"]+" crossorigin="anonymous"/g,''),inputs.legacy.get('index.html').toString());assert.equal((bootstrap.toString().match(/integrity="sha256-/g)||[]).length,4);s.bootstrap=bootstrap;for(const[url,bytes]of r.assets){const physical=url.split('?')[0];if(inputs.legacy.has(physical)&&physical!=='index.html')assert.deepEqual(bytes,inputs.legacy.get(physical));s.aliases.set(url,bytes);}s.current=r.worker;}
 async function waiting(s,r){
- publish(s,r);const event=s.context.waitForEvent('serviceworker',{timeout:30000});await s.page.evaluate(async()=>{const registration=await navigator.serviceWorker.getRegistration();await registration.update();});const w=await event;
- await s.page.waitForFunction(()=>navigator.serviceWorker.getRegistration().then(registration=>registration.waiting?.state==='installed'));
+ const event=s.context.waitForEvent('serviceworker',{timeout:30000});publish(s,r);await s.page.evaluate(async()=>{const registration=await navigator.serviceWorker.getRegistration();await registration.update();});const w=await event;
+ const settled=await registrationState(s.page,'waiting');
  const identity=await w.evaluate(()=>({releaseDigest:CONFIG.releaseDigest,cacheName:CONFIG.cacheName,entryURL:CONFIG.inventory.entryURL,scope:self.registration.scope}));
- assert.equal(identity.releaseDigest,r.releaseDigest,'Observed waiting worker digest');assert.equal(identity.cacheName,r.cacheName,'Observed waiting worker cache');assert.equal(identity.entryURL,r.entryURL,'Observed waiting worker entry');assert.equal(identity.scope,s.origin+'/');s.waitingWitness=identity;return w;
+ assert.equal(identity.releaseDigest,r.releaseDigest,'Observed waiting worker digest');assert.equal(identity.cacheName,r.cacheName,'Observed waiting worker cache');assert.equal(identity.entryURL,r.entryURL,'Observed waiting worker entry');assert.equal(identity.scope,s.origin+'/');s.waitingWitness={...identity,settled};return w;
 }
 async function activate(s,w){const ready=w.evaluate(()=>new Promise(resolve=>self.addEventListener('activate',()=>resolve(true),{once:true})));for(const p of s.context.pages())await bounded(p.close());await bounded(ready);await bounded(w.evaluate(()=>new Promise(resolve=>{const check=()=>self.registration.active?.state==='activated'?resolve(true):setTimeout(check,30);check();})));s.page=await s.context.newPage();await normal(s.page,s);}
 async function complete(s,r){return s.page.evaluate(async({cacheName,sealURL,prefix,assets,releaseDigest})=>{
@@ -84,7 +93,7 @@ async function sub(t,name,fn){await t.test(name,{timeout:180000},async()=>{try{a
 async function using(source,fn){const s=await environment(source);try{return await fn(s);}finally{await dispose(s);}}
 async function firstInstall(s,r,{worker=r.worker,capturePuts=false}={}){
  if(capturePuts)await s.context.addInitScript(()=>{globalThis.__privatePutTrace=[];navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.privateCachePut)globalThis.__privatePutTrace.push(e.data.privateCachePut);});});
- publish(s,r);s.current=worker;const legacyApp=s.page.waitForResponse(x=>x.url()===s.origin+'/app.js');await normal(s.page,s);const response=await legacyApp;assert.equal(response.fromServiceWorker(),false);assert.equal(sha256(await response.body()),sha256(inputs.legacy.get('app.js')));assert.equal(await s.page.evaluate(()=>navigator.serviceWorker.controller),null);await s.page.evaluate(()=>navigator.serviceWorker.ready);await s.page.waitForFunction(()=>navigator.serviceWorker.getRegistration().then(r=>r.active?.state==='activated'));const sealed=await complete(s,r);
+ publish(s,r);s.current=worker;const legacyApp=s.page.waitForResponse(x=>x.url()===s.origin+'/app.js');await normal(s.page,s);const response=await legacyApp;assert.equal(response.fromServiceWorker(),false);assert.equal(sha256(await response.body()),sha256(inputs.legacy.get('app.js')));assert.equal(await s.page.evaluate(()=>navigator.serviceWorker.controller),null);await s.page.evaluate(()=>navigator.serviceWorker.ready);await registrationState(s.page,'active');const sealed=await complete(s,r);
  if(capturePuts){await s.page.waitForFunction(n=>globalThis.__privatePutTrace.length===n,r.inventory.assets.length+1);s.putTrace=await s.page.evaluate(()=>globalThis.__privatePutTrace);}
  await normal(s.page,s);assert.equal(await s.page.evaluate(()=>Boolean(navigator.serviceWorker.controller)),true);return sealed;
 }
