@@ -24,6 +24,35 @@ const git = args => execFileSync('git', ['-c','core.fsmonitor=false','-C',source
   {env,encoding:'utf8',timeout:30000,maxBuffer:16*1024*1024}).trim();
 const digest = file => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const save = (name, data) => fs.writeFileSync(path.join(evidence,name), JSON.stringify(data,null,2)+String.fromCharCode(10));
+
+function diagnoseS2(browserPath) {
+  const temporary = fs.mkdtempSync(path.join(require('node:os').tmpdir(),'pheisiraetha-s2-diagnostic-'));
+  assert.ok(outside(temporary));
+  const checkout = path.join(temporary,'repo');
+  const diagnosticEnv = {};
+  for(const key of ['PATH','LD_LIBRARY_PATH','LANG','LC_ALL','TZ']) if(process.env[key]!==undefined) diagnosticEnv[key]=process.env[key];
+  for(const [key,dir] of Object.entries({HOME:'home',XDG_CONFIG_HOME:'config',XDG_CACHE_HOME:'cache',XDG_DATA_HOME:'data',XDG_STATE_HOME:'state',XDG_RUNTIME_DIR:'runtime',TMP:'tmp',TEMP:'tmp',TMPDIR:'tmp'})) {
+    diagnosticEnv[key]=path.join(temporary,dir);fs.mkdirSync(diagnosticEnv[key],{mode:0o700});
+  }
+  Object.assign(diagnosticEnv,{NODE_PATH:env.NODE_PATH,CODEX_PRIMARY_RUNTIME_NODE_MODULES:env.CODEX_PRIMARY_RUNTIME_NODE_MODULES,LEGACY_DOM_CHROMIUM_EXECUTABLE_PATH:browserPath,GIT_OPTIONAL_LOCKS:'0',GIT_NO_REPLACE_OBJECTS:'1',GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null',GIT_ATTR_NOSYSTEM:'1',GIT_TERMINAL_PROMPT:'0',GIT_ALLOW_PROTOCOL:'file'});
+  const dg = args => execFileSync('git',args,{env:diagnosticEnv,encoding:'utf8',timeout:30000});
+  const reporter = path.join(evidence,'diagnostic-reporter.cjs');
+  fs.writeFileSync(reporter,"module.exports=async function*(events){for await(const event of events){if(event.type==='test:fail')yield require('node:util').inspect(event.data,{depth:12,colors:false,maxStringLength:20000})+String.fromCharCode(10);if(event.type==='test:pass'||event.type==='test:diagnostic')yield JSON.stringify({type:event.type,data:event.data})+String.fromCharCode(10);}};");
+  try {
+    dg(['clone','--quiet','--no-local','--no-hardlinks','--no-checkout','--no-tags',source,checkout]);
+    dg(['-C',checkout,'checkout','--quiet','--detach',PIN.parent]);
+    dg(['-C',checkout,'remote','remove','origin']);
+    for(const ref of dg(['-C',checkout,'for-each-ref','--format=%(refname)']).trim().split(String.fromCharCode(10)).filter(Boolean)) dg(['-C',checkout,'update-ref','-d',ref]);
+    dg(['-C',checkout,'update-ref','refs/heads/main',PIN.main]);
+    const diagnostic = spawnSync(process.execPath,['--test','--test-reporter='+reporter,'--test-name-pattern=^(01|07|18|19) ','browser-packaging/integration/real-browser.test.cjs'],{cwd:checkout,env:diagnosticEnv,encoding:'utf8',timeout:120000,maxBuffer:16*1024*1024});
+    fs.writeFileSync(path.join(evidence,'diagnostic.stdout'),diagnostic.stdout||'');
+    fs.writeFileSync(path.join(evidence,'diagnostic.stderr'),diagnostic.stderr||'');
+    save('diagnostic.json',{purpose:'Diagnostic only; never acceptance',testedCommit:PIN.parent,status:diagnostic.status,signal:diagnostic.signal,error:diagnostic.error?.message});
+    console.log('DIAGNOSTIC ONLY: filtered unchanged S2 tests; full gate remains NOT_ACCEPTED');
+    process.stdout.write(diagnostic.stdout||'');process.stderr.write(diagnostic.stderr||'');
+  } finally {fs.rmSync(temporary,{recursive:true,force:true});}
+}
+
 async function main() {
   assert.equal(process.platform,'linux');
   assert.equal(process.version,'v24.19.0');
@@ -94,6 +123,7 @@ async function main() {
   process.stdout.write(fs.readFileSync(path.join(evidence,'verifier.stdout'),'utf8'));
   process.stderr.write(fs.readFileSync(path.join(evidence,'verifier.stderr'),'utf8'));
   save('process.json',{status:result.status,signal:result.signal,error:result.error?.message});
+  if(result.status!==0) {try {diagnoseS2(selected.path);}catch(error){save('diagnostic-failure.json',{message:error.message});console.error(error);}}
   assert.equal(result.error,undefined);
   assert.equal(result.status,0);
   assert.equal(result.signal,null);
