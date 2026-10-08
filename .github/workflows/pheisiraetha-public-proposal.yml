@@ -92,10 +92,21 @@ jobs:
           a.equal(evidence.off.bootstrapSha256,evidence.on.bootstrapSha256);a.equal(evidence.off.bootstrapFlag,'OFF');a.equal(evidence.on.bootstrapFlag,'OFF');
           a.equal(r.offReleaseDigest,evidence.off.releaseDigest);a.equal(r.onReleaseDigest,evidence.on.releaseDigest);
           const get=id=>r.rows.find(row=>row.id===id).witnesses;
+          const rollback=get('PP-ROLLBACK-01'),saved=rollback.testedOverlay,rollbackDir=path.join(ROOT,'rollback');
+          a.equal(rollback.exactTestedOverlayArchived,true);a.equal(saved.generation,'rollback-11');a.equal(saved.activeMode,'OFF');a.equal(saved.bootstrapFlag,'OFF');
+          const rollbackMeta=read(path.join(rollbackDir,'release-inventory.json'));
+          a.equal(rollbackMeta.releaseDigest,hash(canonical(rollbackMeta.inventory)));a.equal(rollbackMeta.releaseDigest,saved.releaseDigest);
+          a.equal(rollbackMeta.inventory.scope,'STAGED_OFF_RELEASE_PROPOSAL');a.equal(rollbackMeta.inventory.proposal.activeMode,'OFF');
+          a.equal(saved.cacheName,rollback.freshCache);a.notEqual(saved.releaseDigest,evidence.off.releaseDigest);a.notEqual(saved.cacheName,evidence.on.cacheName);
+          a.equal(saved.bootstrapSha256,evidence.off.bootstrapSha256);a.equal(saved.entrySha256,evidence.off.entrySha256);
+          for(const file of saved.files){const bytes=fs.readFileSync(path.join(rollbackDir,file.file));a.equal(bytes.length,file.sizeBytes);a.equal(hash(bytes),file.sha256);}
+          for(const asset of rollbackMeta.inventory.assets){const bytes=fs.readFileSync(path.join(rollbackDir,asset.url.split('?')[0]));a.equal(bytes.length,asset.sizeBytes);a.equal(hash(bytes),asset.sha256);const prior=meta=>meta.inventory.assets.find(x=>x.url===asset.url);const old=prior(read(path.join(ROOT,'off','release-inventory.json')));a.deepEqual(asset,old);}
+          a.equal(saved.workerSha256,hash(fs.readFileSync(path.join(rollbackDir,'sw.js'))));a.equal(saved.inventoryFileSha256,hash(fs.readFileSync(path.join(rollbackDir,'release-inventory.json'))));
           a.deepEqual(get('PP-BUILD-01').off,evidence.off);a.deepEqual(get('PP-BUILD-01').on,evidence.on);
           for(const id of ['PP-BOOTSTRAP-OFF','PP-HARDENING-01','PP-MIX-OFF','PP-INSTALL-FAIL','PP-ROLLBACK-01'])for(const name of ['evaluate','analyze','assessPresentation'])a.equal(get(id).counts[name],0,id+':'+name);
           for(const id of ['PP-MIX-ON','PP-ON-5','PP-ON-9','PP-FALLBACK','PP-IMPORT-01'])for(const name of ['evaluate','analyze','assessPresentation'])a.ok(Number.isSafeInteger(get(id).counts[name])&&get(id).counts[name]>0,id+':'+name);
           a.equal(r.browser.path,fs.realpathSync(process.env.LEGACY_DOM_CHROMIUM_EXECUTABLE_PATH));a.match(r.browser.sha256Before,/^[a-f0-9]{64}$/);
+          a.equal(r.browser.version,'154.0.8037.97');a.equal(r.browser.sha256Before,'6c792041b07547a662e1b17974d1dc34a3db630379b45d9d89ddd7e3e68cc587');
           a.equal(r.browser.sha256Before,r.browser.sha256After);a.equal(r.browser.sha256After,hash(fs.readFileSync(r.browser.path)));
           console.log(JSON.stringify({machineGate:'PASS',stagedEvidence:evidence,matrix:r},null,2));
           NODE
