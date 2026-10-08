@@ -1,0 +1,111 @@
+name: PHEISIRAETHA staged public release qualification
+on:
+  pull_request:
+    branches: [phase2b-4-offline-candidate]
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'release/public-proposal.cjs'
+      - 'release/public-proposal.test.cjs'
+      - '.github/workflows/pheisiraetha-public-proposal.yml'
+permissions:
+  contents: read
+concurrency:
+  group: pheisiraetha-public-proposal-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+jobs:
+  staged-release:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      CHROME_VERSION_EXTRA: stable
+    steps:
+      - name: Checkout exact staged proposal
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select exact Node
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903
+        with:
+          node-version: 24.19.0
+          package-manager-cache: false
+      - name: Prepare external browser driver
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools="$RUNNER_TEMP/pheisiraetha-public-tools"
+          mkdir -p "$tools"
+          npm install --prefix "$tools" --no-save --ignore-scripts --no-audit --no-fund --package-lock=false playwright@1.62.1
+      - name: Prepare and qualify both staged overlays
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NODE_PATH="$RUNNER_TEMP/pheisiraetha-public-tools/node_modules"
+          export PHEISIRAETHA_PUBLIC_EVIDENCE="$RUNNER_TEMP/pheisiraetha-public-evidence"
+          export PHEISIRAETHA_PUBLIC_OUTPUT="$RUNNER_TEMP/pheisiraetha-public-release"
+          export LEGACY_DOM_CHROMIUM_EXECUTABLE_PATH=/opt/google/chrome/chrome
+          node --check release/public-proposal.cjs
+          node --check release/public-proposal.test.cjs
+          node release/public-proposal.cjs "$PHEISIRAETHA_PUBLIC_OUTPUT" offline-candidate-11 offline-candidate-12
+          node --test --test-reporter=spec release/public-proposal.test.cjs
+          node - <<'NODE'
+          'use strict';
+          const a=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+          const {createHash}=require('node:crypto'),{execFileSync}=require('node:child_process');
+          const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
+          const read=file=>JSON.parse(fs.readFileSync(file));
+          const canonical=v=>Array.isArray(v)?'['+v.map(canonical).join(',')+']':v&&typeof v==='object'?'{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+canonical(v[k])).join(',')+'}':JSON.stringify(v);
+          const git=args=>execFileSync('git',['--no-optional-locks',...args],{env:{...process.env,GIT_NO_REPLACE_OBJECTS:'1',GIT_OPTIONAL_LOCKS:'0'}});
+          const ids=['PP-BUILD-01','PP-BOOTSTRAP-OFF','PP-HARDENING-01','PP-MIX-OFF','PP-MIX-ON','PP-ON-5','PP-ON-9','PP-FALLBACK','PP-IMPORT-01','PP-INSTALL-FAIL','PP-ROLLBACK-01'];
+          const ROOT=process.env.PHEISIRAETHA_PUBLIC_OUTPUT;
+          const r=read(path.join(process.env.PHEISIRAETHA_PUBLIC_EVIDENCE,'public-proposal-matrix.json'));
+          const evidence=read(path.join(ROOT,'proposal-evidence.json'));
+          a.equal(process.version,'v24.19.0');a.equal(require('playwright/package.json').version,'1.62.1');
+          a.equal(r.status,'PASS');a.equal(r.phase,'PRIVATE_HARDENED_PUBLIC_PROPOSAL');
+          a.equal(r.candidateCommit,git(['rev-parse','HEAD']).toString().trim());
+          a.deepEqual(r.rows.map(x=>x.id).sort(),ids.slice().sort());a.equal(new Set(r.rows.map(x=>x.id)).size,ids.length);
+          for(const row of r.rows){a.equal(row.status,'PASS');a.ok(row.witnesses&&typeof row.witnesses==='object'&&!Array.isArray(row.witnesses)&&Object.keys(row.witnesses).length);}
+          a.equal(r.tests,ids.length);a.equal(r.skipped,0);a.equal(r.todo,0);a.equal(r.frozenUnchanged,true);
+          a.equal(r.publicDeploymentPerformed,false);a.equal(r.publicActivationPerformed,false);a.equal(r.productionChanged,false);
+          a.equal(r.sourceFlag,'OFF');a.equal(r.expectedMountPath,'/pheisiraetha-app/');
+          a.equal(evidence.sourceCommit,r.candidateCommit);a.equal(evidence.status,'STAGED_UNQUALIFIED');
+          a.equal(evidence.deploymentPerformed,false);a.equal(evidence.expectedMountPath,r.expectedMountPath);
+          a.equal(evidence.qualifiedBuilderBlob,'7982555aba12baf5323672da2371ed4a4829b893');
+          a.equal(git(['rev-parse','HEAD:release/build.cjs']).toString().trim(),'7982555aba12baf5323672da2371ed4a4829b893');
+          a.equal(git(['rev-parse','HEAD:release/worker-template.js']).toString().trim(),'45438c5b650ea252ab861a7a11a4a149e470c2b4');
+          a.equal(evidence.proposalModuleSha256,hash(fs.readFileSync('release/public-proposal.cjs')));
+          for(const [mode,scope] of [['off','STAGED_OFF_RELEASE_PROPOSAL'],['on','STAGED_ON_RELEASE_PROPOSAL']]){
+            const dir=path.join(ROOT,mode),meta=read(path.join(dir,'release-inventory.json')),summary=evidence[mode],p=meta.inventory.provenance;
+            a.equal(meta.releaseDigest,hash(canonical(meta.inventory)));a.equal(meta.releaseDigest,summary.releaseDigest);a.equal(meta.inventory.scope,scope);
+            a.equal(p.sourceFlag,'OFF');a.equal(p.bootstrapKind,'HARDENED_S3_OFF');a.equal(p.emittedFlag,mode.toUpperCase());
+            a.equal(p.integrationCommit,'7e583ac695be2b213d25591deab430664e682988');a.equal(p.productionCommit,'255a5d9d27461dcacaebc1bc80ab322dd54b4de8');
+            a.equal(p.dtoVersion,'pheisiraetha-render-v1');a.equal(p.safetyPolicy,'safety-v1');a.equal(p.registryVersion,'safety-registry-v1');
+            a.equal(p.sourceAppSha256,hash(git(['show',p.integrationCommit+':app.js'])));a.equal(p.bootstrapAppSha256,p.sourceAppSha256);
+            a.equal(p.bootstrapEntrySha256,hash(fs.readFileSync(path.join(dir,'index.html'))));a.equal(summary.workerSha256,hash(fs.readFileSync(path.join(dir,'sw.js'))));
+            a.equal(meta.inventory.workerTemplateSha256,hash(git(['show','HEAD:release/worker-template.js'])));
+            for(const file of summary.files){const bytes=fs.readFileSync(path.join(dir,file.file));a.equal(bytes.length,file.sizeBytes);a.equal(hash(bytes),file.sha256);}
+            for(const asset of meta.inventory.assets){const bytes=fs.readFileSync(path.join(dir,asset.url.split('?')[0]));a.equal(bytes.length,asset.sizeBytes);a.equal(hash(bytes),asset.sha256);}
+          }
+          a.equal(evidence.off.bootstrapSha256,evidence.on.bootstrapSha256);a.equal(evidence.off.bootstrapFlag,'OFF');a.equal(evidence.on.bootstrapFlag,'OFF');
+          a.equal(r.offReleaseDigest,evidence.off.releaseDigest);a.equal(r.onReleaseDigest,evidence.on.releaseDigest);
+          const get=id=>r.rows.find(row=>row.id===id).witnesses;
+          a.deepEqual(get('PP-BUILD-01').off,evidence.off);a.deepEqual(get('PP-BUILD-01').on,evidence.on);
+          for(const id of ['PP-BOOTSTRAP-OFF','PP-HARDENING-01','PP-MIX-OFF','PP-INSTALL-FAIL','PP-ROLLBACK-01'])for(const name of ['evaluate','analyze','assessPresentation'])a.equal(get(id).counts[name],0,id+':'+name);
+          for(const id of ['PP-MIX-ON','PP-ON-5','PP-ON-9','PP-FALLBACK','PP-IMPORT-01'])for(const name of ['evaluate','analyze','assessPresentation'])a.ok(Number.isSafeInteger(get(id).counts[name])&&get(id).counts[name]>0,id+':'+name);
+          a.equal(r.browser.path,fs.realpathSync(process.env.LEGACY_DOM_CHROMIUM_EXECUTABLE_PATH));a.match(r.browser.sha256Before,/^[a-f0-9]{64}$/);
+          a.equal(r.browser.sha256Before,r.browser.sha256After);a.equal(r.browser.sha256After,hash(fs.readFileSync(r.browser.path)));
+          console.log(JSON.stringify({machineGate:'PASS',stagedEvidence:evidence,matrix:r},null,2));
+          NODE
+      - name: Preserve exact staged artifacts and evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pheisiraetha-public-proposal-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/pheisiraetha-public-evidence/
+            ${{ runner.temp }}/pheisiraetha-public-release/
+          if-no-files-found: warn
+          retention-days: 14
