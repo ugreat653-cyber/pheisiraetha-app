@@ -1,0 +1,62 @@
+name: PHEISIRAETHA private 2B-4 qualification
+on:
+  pull_request:
+    branches: [phase2b-3b6-s3-verifier]
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'release/**'
+      - '.github/workflows/pheisiraetha-2b4.yml'
+permissions:
+  contents: read
+concurrency:
+  group: pheisiraetha-2b4-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+jobs:
+  private-release:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      CHROME_VERSION_EXTRA: stable
+      PHEISIRAETHA_2B4_EVIDENCE: ${{ runner.temp }}/pheisiraetha-2b4-evidence
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select exact Node
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903
+        with:
+          node-version: 24.19.0
+          package-manager-cache: false
+      - name: Prepare external browser driver
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools="$RUNNER_TEMP/pheisiraetha-2b4-tools"
+          mkdir -p "$tools"
+          npm install --prefix "$tools" --no-save --ignore-scripts --no-audit --no-fund --package-lock=false playwright@1.62.1
+      - name: Build and qualify private OFF release
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NODE_PATH="$RUNNER_TEMP/pheisiraetha-2b4-tools/node_modules"
+          export LEGACY_DOM_CHROMIUM_EXECUTABLE_PATH=/opt/google/chrome/chrome
+          node --check release/build.cjs
+          node --check release/worker-template.js
+          node --check release/lifecycle.test.cjs
+          node release/build.cjs "$RUNNER_TEMP/pheisiraetha-2b4-release" offline-candidate-01
+          node --test --test-reporter=spec release/lifecycle.test.cjs
+      - name: Preserve candidate and qualification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pheisiraetha-2b4-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/pheisiraetha-2b4-evidence/
+            ${{ runner.temp }}/pheisiraetha-2b4-release/
+          if-no-files-found: warn
+          retention-days: 14
