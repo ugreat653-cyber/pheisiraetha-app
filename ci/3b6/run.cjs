@@ -36,6 +36,12 @@ async function main() {
   assert.equal(git(['status','--porcelain']),'');
   const tools = fs.realpathSync(process.env.CODEX_PRIMARY_RUNTIME_NODE_MODULES);
   assert.ok(outside(tools),'Tools must be external');
+  // Frozen suites also require esbuild by its explicit ignored relative path.
+  const dependencies = path.join(source,'browser-packaging','node_modules');
+  fs.mkdirSync(dependencies,{recursive:true});
+  for(const name of ['esbuild','@esbuild']) fs.cpSync(path.join(tools,name),path.join(dependencies,name),{recursive:true});
+  assert.equal(require(path.join(dependencies,'esbuild')).version,'0.25.5');
+  fs.accessSync(path.join(dependencies,'@esbuild','linux-x64','bin','esbuild'),fs.constants.X_OK);
   const candidates = ['/opt/google/chrome/chrome','/usr/bin/google-chrome',
     '/usr/bin/google-chrome-stable','/usr/bin/chromium','/usr/bin/chromium-browser'];
   const rejected = [], seen = new Set();
@@ -48,6 +54,9 @@ async function main() {
     try {
       assert.ok(fs.lstatSync(file).isFile());
       fs.accessSync(file,fs.constants.X_OK);
+      const channelFile = path.join(path.dirname(file),'CHROME_VERSION_EXTRA');
+      const packagedChannel = fs.existsSync(channelFile) ? fs.readFileSync(channelFile,'utf8').trim() : null;
+      if(packagedChannel) assert.equal(packagedChannel,env.CHROME_VERSION_EXTRA);
       const sha256 = digest(file);
       const version = spawnSync(file,['--version'],{env,encoding:'utf8',timeout:15000});
       assert.equal(version.status,0);
@@ -67,11 +76,11 @@ async function main() {
       assert.equal(launch.stderr.trim(),'');
       assert.ok(version.stdout.includes(launch.stdout.trim()));
       assert.equal(digest(file),sha256);
-      selected = {path:file,sha256,version:version.stdout.trim()};
+      selected = {path:file,sha256,version:version.stdout.trim(),packagedChannel};
       break;
     } catch(error) {rejected.push({path:file,reason:error.message});}
   }
-  save('qualification.json',{node:process.version,platform:process.platform,tools,selected,rejected});
+  save('qualification.json',{node:process.version,platform:process.platform,tools,dependencies,selected,rejected});
   console.log(fs.readFileSync(path.join(evidence,'qualification.json'),'utf8'));
   assert.ok(selected,'ENVIRONMENT_BLOCKED_NO_USABLE_CHROMIUM');
   const out = fs.openSync(path.join(evidence,'verifier.stdout'),'w');
