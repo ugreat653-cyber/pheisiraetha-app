@@ -23,8 +23,7 @@ const env = {...process.env, GIT_OPTIONAL_LOCKS:'0', GIT_TERMINAL_PROMPT:'0'};
 const git = args => execFileSync('git', ['-c','core.fsmonitor=false','-C',source,...args],
   {env,encoding:'utf8',timeout:30000,maxBuffer:16*1024*1024}).trim();
 const digest = file => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
-const save = (name, data) => fs.writeFileSync(path.join(evidence,name), JSON.stringify(data,null,2)+'
-');
+const save = (name, data) => fs.writeFileSync(path.join(evidence,name), JSON.stringify(data,null,2)+String.fromCharCode(10));
 async function main() {
   assert.equal(process.platform,'linux');
   assert.equal(process.version,'v24.19.0');
@@ -53,7 +52,7 @@ async function main() {
       const version = spawnSync(file,['--version'],{env,encoding:'utf8',timeout:15000});
       assert.equal(version.status,0);
       assert.equal(version.signal,null);
-      assert.match(version.stdout.trim(),/^(?:Chromium|Google Chrome|Chrome for Testing|HeadlessChrome)s+d+/);
+      assert.match(version.stdout.trim(),/^(?:Chromium|Google Chrome|Chrome for Testing|HeadlessChrome) +[0-9]+/);
       const probe = String.raw`const {chromium}=require(process.argv[1]);
         (async()=>{let browser;try{
           browser=await chromium.launch({headless:true,executablePath:process.argv[2]});
