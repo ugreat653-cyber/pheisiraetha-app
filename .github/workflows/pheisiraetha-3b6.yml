@@ -1,0 +1,66 @@
+name: PHEISIRAETHA frozen 3B-6 verification
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/workflows/pheisiraetha-3b6.yml'
+      - 'ci/3b6/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pheisiraetha-3b6-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  frozen-verifier:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    steps:
+      - name: Checkout CI controller
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: controller
+          persist-credentials: false
+      - name: Checkout exact frozen S3
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: 7e583ac695be2b213d25591deab430664e682988
+          path: frozen-source
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select exact Node
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version: '24.19.0'
+          package-manager-cache: false
+      - name: Prepare external pinned tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools="$RUNNER_TEMP/pheisiraetha-3b6-tools"
+          mkdir -p "$tools"
+          npm install --prefix "$tools" --no-save --ignore-scripts --no-audit --no-fund --package-lock=false esbuild@0.25.5 playwright@1.62.1
+      - name: Qualify runtime and run unchanged verifier
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools="$RUNNER_TEMP/pheisiraetha-3b6-tools/node_modules"
+          export NODE_PATH="$tools"
+          export CODEX_PRIMARY_RUNTIME_NODE_MODULES="$tools"
+          node controller/ci/3b6/run.cjs "$GITHUB_WORKSPACE/frozen-source" "$RUNNER_TEMP/pheisiraetha-3b6-evidence"
+      - name: Preserve exact evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pheisiraetha-3b6-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/pheisiraetha-3b6-evidence/
+          if-no-files-found: warn
+          retention-days: 14
