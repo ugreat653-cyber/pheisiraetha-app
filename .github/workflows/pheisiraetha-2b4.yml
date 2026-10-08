@@ -19,8 +19,6 @@ jobs:
     env:
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
       CHROME_VERSION_EXTRA: stable
-      PHEISIRAETHA_2B4_EVIDENCE: ${{ runner.temp }}/pheisiraetha-2b4-evidence
-      PHEISIRAETHA_2B4_OUTPUT: ${{ runner.temp }}/pheisiraetha-2b4-release
     steps:
       - name: Checkout exact candidate
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
@@ -45,6 +43,8 @@ jobs:
         run: |
           set -euo pipefail
           export NODE_PATH="$RUNNER_TEMP/pheisiraetha-2b4-tools/node_modules"
+          export PHEISIRAETHA_2B4_EVIDENCE="$RUNNER_TEMP/pheisiraetha-2b4-evidence"
+          export PHEISIRAETHA_2B4_OUTPUT="$RUNNER_TEMP/pheisiraetha-2b4-release"
           export LEGACY_DOM_CHROMIUM_EXECUTABLE_PATH=/opt/google/chrome/chrome
           node --check release/build.cjs
           node --check release/worker-template.js
