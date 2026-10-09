@@ -6,7 +6,7 @@ on:
         description: Approved operation
         required: true
         type: choice
-        options: [ON, ROLLBACK]
+        options: ["ON", "ROLLBACK"]
       confirmation:
         description: 'Exact approval: ON:ZIP_SHA256 or ROLLBACK:ZIP_SHA256'
         required: true
