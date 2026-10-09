@@ -1,0 +1,68 @@
+name: PHEISIRAETHA publish exactly approved artifact
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Approved operation
+        required: true
+        type: choice
+        options: [ON, ROLLBACK]
+      confirmation:
+        description: 'Exact approval: ON:ZIP_SHA256 or ROLLBACK:ZIP_SHA256'
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: pheisiraetha-approved-public-release
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Require the exact release confirmation
+        shell: bash
+        env:
+          MODE: ${{ inputs.mode }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          case "$MODE" in ON|ROLLBACK) ;; *) exit 1 ;; esac
+          test "$CONFIRMATION" = "$MODE:85bfe111a96f0e9773d505cbebe3d4750c4320f00eec6a370ce86147c33766b8"
+      - name: Checkout reviewed transport only
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Validate approved ZIP and exact full overlay
+        shell: bash
+        env:
+          MODE: ${{ inputs.mode }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          printf '%s  %s\n' '92d1aec6c60326fc576c6fe1ae72eeeb9c1ae87f65966a5c480397319cf8dd8f' 'docs/phase2b-4/verify-pages-archive.py' | sha256sum --check --status
+          python3 -B docs/phase2b-4/verify-pages-archive.py "$MODE" "$RUNNER_TEMP/approved-pages"
+      - name: Package exact accepted files without building
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b
+        with:
+          path: ${{ runner.temp }}/approved-pages
+          retention-days: 14
+  publish:
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy the verified transport artifact
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346

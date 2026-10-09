@@ -1,0 +1,109 @@
+name: PHEISIRAETHA exact Pages transport dry run
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'docs/phase2b-4/verify-pages-archive.py'
+      - '.github/workflows/pheisiraetha-pages-transport.yml'
+      - '.github/workflows/pheisiraetha-publish-approved.yml'
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: pheisiraetha-pages-transport-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+jobs:
+  roundtrip:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [ON, ROLLBACK]
+    env:
+      MODE: ${{ matrix.mode }}
+    steps:
+      - name: Checkout exact reviewed transport
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Verify approved ZIP and copy exact overlay
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          printf '%s  %s\n' '92d1aec6c60326fc576c6fe1ae72eeeb9c1ae87f65966a5c480397319cf8dd8f' 'docs/phase2b-4/verify-pages-archive.py' | sha256sum --check --status
+          python3 -B docs/phase2b-4/verify-pages-archive.py "$MODE" "$RUNNER_TEMP/pages-${MODE,,}"
+      - name: Package unchanged overlay for Pages
+        id: pages
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b
+        with:
+          name: pheisiraetha-transport-${{ matrix.mode }}
+          path: ${{ runner.temp }}/pages-${{ matrix.mode == 'ON' && 'on' || 'rollback' }}
+          retention-days: 14
+      - name: Verify packaged TAR roundtrip
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PACKAGED_ARTIFACT_ID: ${{ steps.pages.outputs.artifact_id }}
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          import hashlib, io, json, os, pathlib, runpy, tarfile, urllib.error, urllib.request, zipfile
+          m=runpy.run_path("docs/phase2b-4/verify-pages-archive.py")
+          artifact_id=int(os.environ["PACKAGED_ARTIFACT_ID"])
+          metadata=m["api_json"]("/actions/artifacts/"+str(artifact_id))
+          assert metadata["id"]==artifact_id and not metadata["expired"]
+          assert metadata["workflow_run"]["id"]==int(os.environ["GITHUB_RUN_ID"])
+          request=urllib.request.Request("https://api.github.com/repos/"+m["REPOSITORY"]+"/actions/artifacts/"+str(artifact_id)+"/zip",headers={"Authorization":"Bearer "+os.environ["GH_TOKEN"],"User-Agent":"PHEISIRAETHA-transport-roundtrip"})
+          try:
+              urllib.request.build_opener(m["NoRedirect"]()).open(request,timeout=30)
+          except urllib.error.HTTPError as error:
+              assert error.code==302
+              location=error.headers.get("Location")
+              assert location and location.startswith("https://")
+          else:
+              raise ValueError("Expected signed artifact redirect")
+          with urllib.request.urlopen(location,timeout=60) as response:
+              data=response.read(m["MAX_BYTES"]+1)
+          assert len(data)<=m["MAX_BYTES"]
+          assert metadata["digest"]=="sha256:"+hashlib.sha256(data).hexdigest()
+          zip_archive=zipfile.ZipFile(io.BytesIO(data))
+          assert zip_archive.namelist()==["artifact.tar"]
+          tar_bytes=zip_archive.read("artifact.tar")
+          assert len(tar_bytes)<=m["MAX_BYTES"]
+          site=pathlib.Path(os.environ["RUNNER_TEMP"])/("pages-"+os.environ["MODE"].lower())
+          expected={p.relative_to(site).as_posix():p.read_bytes() for p in site.rglob("*") if p.is_file()}
+          actual={}
+          with tarfile.open(fileobj=io.BytesIO(tar_bytes),mode="r:*") as tar:
+              for item in tar:
+                  if item.isdir():
+                      continue
+                  assert item.isfile() and not item.issym() and not item.islnk()
+                  name=item.name[2:] if item.name.startswith("./") else item.name
+                  m["safe_name"](name)
+                  assert name not in actual and name in expected
+                  assert item.size==len(expected[name])
+                  stream=tar.extractfile(item)
+                  assert stream is not None
+                  content=stream.read()
+                  assert content==expected[name]
+                  actual[name]=hashlib.sha256(content).hexdigest()
+          assert set(actual)==set(expected)
+          receipt={"transportGate":"PASS","packagingGate":"PASS","mode":os.environ["MODE"],"deploymentPerformed":False,"approvedSourceArtifact":m["ARTIFACT_ID"],"approvedSourceZipSha256":m["ARCHIVE_SHA256"],"packagedArtifactID":artifact_id,"packagedZipSha256":hashlib.sha256(data).hexdigest(),"tarSha256":hashlib.sha256(tar_bytes).hexdigest(),"files":actual}
+          evidence=pathlib.Path(os.environ["RUNNER_TEMP"])/("transport-evidence-"+os.environ["MODE"].lower())
+          evidence.mkdir()
+          (evidence/"transport-receipt.json").write_text(json.dumps(receipt,sort_keys=True,indent=2)+"\n",encoding="utf-8")
+          print(json.dumps(receipt,sort_keys=True,indent=2))
+          PY
+      - name: Preserve transport receipt
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pheisiraetha-transport-evidence-${{ matrix.mode }}
+          path: ${{ runner.temp }}/transport-evidence-${{ matrix.mode == 'ON' && 'on' || 'rollback' }}/
+          retention-days: 14
+          if-no-files-found: error
