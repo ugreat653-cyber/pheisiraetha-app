@@ -112,10 +112,10 @@ function request(url, {method = 'GET', token = null, data = null, limit = 8 * 10
     if (body) req.write(body); req.end();
   });
 }
-async function api(suffix, options = {}) {
+async function api(suffix, options = {}, transport = request) {
   requireTrue((suffix === '' || suffix.startsWith('/')) && !suffix.includes('://'), 'Fixed repository API suffix required');
   const token = process.env.GH_TOKEN; requireTrue(token, 'GH_TOKEN missing');
-  const reply = await request('https://api.github.com/repos/' + P.repository + suffix, {...options, token});
+  const reply = await transport('https://api.github.com/repos/' + P.repository + suffix, {...options, token});
   requireTrue(reply.status >= 200 && reply.status < 300, 'GitHub API ' + reply.status + ' at ' + suffix);
   return reply.body.length ? JSON.parse(reply.body.toString('utf8')) : null;
 }
@@ -246,33 +246,44 @@ async function preflight(evidence) {
   console.log(JSON.stringify(record));
   return record;
 }
+function checkedDispatchResponse(response, priorID) {
+  const id = response?.workflow_run_id;
+  if (id !== undefined) requireTrue(Number.isSafeInteger(id) && id > priorID, 'Unexpected rollback dispatch response');
+  return id ?? null;
+}
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-async function waitRollbackRun(mainSHA, dispatchAt, dispatchedID, priorID) {
-  const deadline = Date.now() + 35 * 60 * 1000;
+async function waitRollbackRun(mainSHA, dispatchAt, dispatchedID, priorID, {apiCall = api, getJobs = jobsFor, getLogs = jobLogs, wait = sleep, now = Date.now} = {}) {
+  const dispatchTime = Date.parse(dispatchAt);
+  requireTrue(Number.isFinite(dispatchTime), 'Invalid rollback dispatch timestamp');
+  // GitHub created_at has whole-second precision; use this same bound at discovery and completion.
+  const dispatchSince = new Date(Math.floor(dispatchTime / 1000) * 1000).toISOString();
+  const deadline = now() + 35 * 60 * 1000;
   let observedID = dispatchedID;
-  while (Date.now() < deadline) {
+  while (now() < deadline) {
     if (!observedID) {
-      const history = await api('/actions/workflows/pheisiraetha-publish-approved.yml/runs?per_page=100');
-      const matching = history.workflow_runs.filter(run => run.id > priorID && run.head_sha === mainSHA &&
+      const history = await apiCall('/actions/workflows/pheisiraetha-publish-approved.yml/runs?per_page=100');
+      const matching = history.workflow_runs.filter(run => Number.isSafeInteger(run.id) && run.id > priorID && run.head_sha === mainSHA &&
         run.head_branch === 'main' && run.event === 'workflow_dispatch' && run.path === P.publisher &&
-        Date.parse(run.created_at) >= Date.parse(dispatchAt) - 5000).sort((a, b) => a.id - b.id);
+        sameRepository(run.repository) && sameRepository(run.head_repository) &&
+        Date.parse(run.created_at) >= Date.parse(dispatchSince)).sort((a, b) => a.id - b.id);
       requireTrue(matching.length <= 1, 'Ambiguous/new unexpected publisher dispatch');
       if (matching.length) observedID = matching[0].id;
     }
     if (observedID) {
-      const run = await api('/actions/runs/' + observedID);
-      requireTrue(run.head_sha === mainSHA && run.path === P.publisher && run.event === 'workflow_dispatch' &&
+      const run = await apiCall('/actions/runs/' + observedID);
+      requireTrue(Number.isSafeInteger(run.id) && run.id === observedID && run.id > priorID &&
+        run.head_sha === mainSHA && run.path === P.publisher && run.event === 'workflow_dispatch' &&
         run.head_branch === 'main' && sameRepository(run.repository) && sameRepository(run.head_repository), 'Rollback publisher identity changed');
       if (run.status === 'completed') {
-        checkedPublisherRun(run, mainSHA, dispatchAt);
-        const jobs = await jobsFor(run.id);
+        checkedPublisherRun(run, mainSHA, dispatchSince);
+        const jobs = await getJobs(run.id);
         requireTrue(['verify', 'publish'].every(name => jobs.some(job => job.name === name && job.status === 'completed' && job.conclusion === 'success')), 'Rollback verify/publish jobs did not both succeed');
-        const receipt = lineJSON(await jobLogs(jobs.find(job => job.name === 'verify').id), 'transportGate', 'PASS');
+        const receipt = lineJSON(await getLogs(jobs.find(job => job.name === 'verify').id), 'transportGate', 'PASS');
         checkedTransportReceipt(receipt, 'ROLLBACK');
         return {run: publicRun(run), receipt, jobs: jobs.map(job => ({id: job.id, name: job.name, conclusion: job.conclusion}))};
       }
     }
-    await sleep(30000);
+    await wait(30000);
   }
   throw new Error('Approved OFF rollback publisher timed out');
 }
@@ -294,8 +305,7 @@ async function rollback(evidence) {
     originalONRunID: latest.run.id, target: P.target, mainSHA: state.mainSHA, source, generation: 'rollback-11',
     workflow: P.publisher, requestBody});
   const response = await api('/actions/workflows/pheisiraetha-publish-approved.yml/dispatches', {method: 'POST', data: requestBody});
-  const id = response && response.workflow_run_id;
-  if (id !== undefined) requireTrue(Number.isSafeInteger(id) && id > latest.run.id, 'Unexpected rollback dispatch response');
+  const id = checkedDispatchResponse(response, latest.run.id);
   const published = await waitRollbackRun(state.mainSHA, dispatchAt, id || null, latest.run.id);
   const after = await checkMainAndPages();
   requireTrue(after.mainSHA === state.mainSHA, 'Main changed during rollback');
@@ -307,7 +317,151 @@ async function rollback(evidence) {
   console.log(JSON.stringify(record));
   return record;
 }
-function selfTest() {
+async function rollbackRegressionTests() {
+  const checks = [];
+  let mockedRequests = 0, mockedDispatches = 0;
+  const mainSHA = 'd'.repeat(40), priorID = 100, runID = 101;
+  const dispatchAt = '2026-10-09T12:00:00.987Z';
+  const repository = {id: P.repositoryID, full_name: P.repository};
+  const goodRun = {id: runID, repository, head_repository: repository, head_sha: mainSHA,
+    head_branch: 'main', event: 'workflow_dispatch', path: P.publisher,
+    status: 'completed', conclusion: 'success', created_at: '2026-10-09T12:00:00Z'};
+  const goodJobs = [{id: 201, name: 'verify', status: 'completed', conclusion: 'success'},
+    {id: 202, name: 'publish', status: 'completed', conclusion: 'success'}];
+  const goodReceipt = {transportGate: 'PASS', selectedMode: 'ROLLBACK', run: P.sourceRun,
+    head: P.sourceHead, artifact: P.sourceArtifact, zipSha256: P.zipSHA256, files: 19,
+    deploymentPerformed: false, expiresAt: '2100-01-01T00:00:00Z'};
+  function harness({history = [[goodRun]], runs = [goodRun], jobs = goodJobs,
+    log = JSON.stringify(goodReceipt), advance = 30000} = {}) {
+    let clock = Date.parse(dispatchAt), historyIndex = 0, runIndex = 0;
+    const calls = {history: 0, run: 0, waits: 0};
+    return {calls, dependencies: {
+      now: () => clock,
+      wait: async ms => { assert.equal(ms, 30000); calls.waits++; clock += advance; },
+      apiCall: async suffix => {
+        mockedRequests++;
+        if (suffix === '/actions/workflows/pheisiraetha-publish-approved.yml/runs?per_page=100') {
+          calls.history++;
+          return {workflow_runs: structuredClone(history[Math.min(historyIndex++, history.length - 1)])};
+        }
+        assert.equal(suffix, '/actions/runs/' + runID);
+        calls.run++;
+        return structuredClone(runs[Math.min(runIndex++, runs.length - 1)]);
+      },
+      getJobs: async id => { mockedRequests++; assert.equal(id, runID); return structuredClone(jobs); },
+      getLogs: async id => { mockedRequests++; assert.equal(id, 201); return log; }
+    }};
+  }
+  const previousToken = process.env.GH_TOKEN;
+  process.env.GH_TOKEN = 'controller-regression-token';
+  async function dispatch(status, body, h) {
+    const response = await api('/actions/workflows/pheisiraetha-publish-approved.yml/dispatches',
+      {method: 'POST', data: rollbackRequest()}, async (url, options) => {
+        mockedRequests++; mockedDispatches++;
+        assert.equal(url, 'https://api.github.com/repos/' + P.repository + '/actions/workflows/pheisiraetha-publish-approved.yml/dispatches');
+        assert.equal(options.method, 'POST');
+        assert.equal(options.token, 'controller-regression-token');
+        assert.deepEqual(options.data, {ref: 'main', inputs: {mode: 'ROLLBACK', confirmation: 'ROLLBACK:' + P.zipSHA256}});
+        return {status, body: Buffer.from(body)};
+      });
+    const id = checkedDispatchResponse(response, priorID);
+    return waitRollbackRun(mainSHA, dispatchAt, id, priorID, h.dependencies);
+  }
+  try {
+    const delayed = harness({history: [[], [{...goodRun, id: priorID}], [goodRun]],
+      runs: [{...goodRun, status: 'in_progress', conclusion: null}, goodRun]});
+    const published = await dispatch(204, '', delayed);
+    assert.equal(published.run.id, runID);
+    assert.deepEqual(published.receipt, goodReceipt);
+    assert.equal(delayed.calls.history, 3);
+    assert.equal(delayed.calls.run, 2);
+    assert.equal(delayed.calls.waits, 3);
+    checks.push('dispatch-204-empty-body-delayed-run-discovery');
+    checks.push('timestamp-same-second-precision-accepted-at-discovery-and-completion');
+    const explicit = harness();
+    assert.equal((await dispatch(200, JSON.stringify({workflow_run_id: runID}), explicit)).run.id, runID);
+    assert.equal(explicit.calls.history, 0);
+    checks.push('dispatch-valid-explicit-new-run-id');
+    assert.equal((await dispatch(200, '{}', harness())).run.id, runID);
+    checks.push('dispatch-json-without-optional-run-id');
+    for (const [name, id] of [['null', null], ['string', String(runID)], ['stale', priorID], ['fractional', 101.5]]) {
+      const h = harness();
+      await assert.rejects(dispatch(200, JSON.stringify({workflow_run_id: id}), h), /Unexpected rollback dispatch response/);
+      assert.equal(h.calls.history + h.calls.run, 0);
+      checks.push('reject-dispatch-' + name + '-run-id');
+    }
+    for (const status of [403, 422, 500]) {
+      const h = harness();
+      await assert.rejects(dispatch(status, '', h), new RegExp('GitHub API ' + status));
+      assert.equal(h.calls.history + h.calls.run + h.calls.waits, 0);
+      checks.push('reject-failed-dispatch-' + status + '-without-polling');
+    }
+    const malformed = harness();
+    await assert.rejects(dispatch(200, '{', malformed), SyntaxError);
+    assert.equal(malformed.calls.history + malformed.calls.run, 0);
+    checks.push('reject-malformed-dispatch-response-without-polling');
+    const earlier = {...goodRun, created_at: '2026-10-09T11:59:59Z'};
+    const stale = harness({history: [[earlier]], advance: 35 * 60 * 1000});
+    await assert.rejects(dispatch(204, '', stale), /timed out/);
+    assert.equal(stale.calls.run, 0);
+    checks.push('reject-previous-second-at-discovery');
+    await assert.rejects(waitRollbackRun(mainSHA, dispatchAt, runID, priorID,
+      harness({runs: [earlier]}).dependencies), /preceded/);
+    checks.push('reject-previous-second-at-completion');
+    const ambiguous = harness({history: [[goodRun, {...goodRun, id: runID + 1}]]});
+    await assert.rejects(dispatch(204, '', ambiguous), /Ambiguous/);
+    assert.equal(ambiguous.calls.run, 0);
+    checks.push('reject-ambiguous-correlated-runs');
+    const wrong = [
+      ['run-id', {id: runID + 1}], ['sha', {head_sha: 'e'.repeat(40)}],
+      ['branch', {head_branch: 'other'}], ['event', {event: 'push'}],
+      ['workflow', {path: '.github/workflows/other.yml'}],
+      ['repository', {repository: {...repository, id: 1}}],
+      ['head-repository', {head_repository: {...repository, full_name: 'other/repo'}}]
+    ];
+    for (const [name, change] of wrong) {
+      await assert.rejects(waitRollbackRun(mainSHA, dispatchAt, runID, priorID,
+        harness({runs: [{...goodRun, ...change}]}).dependencies), /identity changed/);
+      checks.push('reject-wrong-rollback-' + name);
+    }
+    const decoys = [{...goodRun, id: priorID}, {...goodRun, id: runID + 2, head_sha: 'e'.repeat(40)},
+      {...goodRun, id: runID + 3, repository: {...repository, id: 1}},
+      {...goodRun, id: runID + 4, event: 'push'}, {...goodRun, id: runID + 5, path: '.github/workflows/other.yml'}, earlier];
+    assert.equal((await dispatch(204, '', harness({history: [[...decoys, goodRun]]}))).run.id, runID);
+    checks.push('discover-only-exact-new-repository-sha-event-workflow-and-time');
+    await assert.rejects(waitRollbackRun(mainSHA, dispatchAt, runID, priorID,
+      harness({runs: [{...goodRun, conclusion: 'failure'}]}).dependencies), /complete successfully/);
+    checks.push('reject-failed-rollback-publisher');
+    for (const [name, jobs] of [['missing-publish', goodJobs.slice(0, 1)],
+      ['failed-verify', [{...goodJobs[0], conclusion: 'failure'}, goodJobs[1]]]]) {
+      await assert.rejects(waitRollbackRun(mainSHA, dispatchAt, runID, priorID,
+        harness({jobs}).dependencies), /did not both succeed/);
+      checks.push('reject-' + name + '-job');
+    }
+    for (const [name, change] of [['on-mode', {selectedMode: 'ON'}], ['artifact', {artifact: 1}],
+      ['zip', {zipSha256: '0'.repeat(64)}], ['incomplete-overlay', {files: 18}]]) {
+      await assert.rejects(waitRollbackRun(mainSHA, dispatchAt, runID, priorID,
+        harness({log: JSON.stringify({...goodReceipt, ...change})}).dependencies));
+      checks.push('reject-rollback-receipt-' + name);
+    }
+    await assert.rejects(waitRollbackRun(mainSHA, dispatchAt, runID, priorID,
+      harness({log: JSON.stringify(goodReceipt) + '\n' + JSON.stringify(goodReceipt)}).dependencies), /Expected one/);
+    checks.push('reject-duplicate-rollback-receipts');
+    const timeout = harness({history: [[]], advance: 35 * 60 * 1000});
+    await assert.rejects(dispatch(204, '', timeout), /timed out/);
+    assert.equal(timeout.calls.run, 0);
+    checks.push('reject-delayed-run-discovery-timeout');
+    const invalidTime = harness();
+    await assert.rejects(waitRollbackRun(mainSHA, 'invalid', runID, priorID, invalidTime.dependencies), /Invalid rollback dispatch timestamp/);
+    assert.equal(invalidTime.calls.history + invalidTime.calls.run, 0);
+    checks.push('reject-invalid-dispatch-timestamp');
+  } finally {
+    if (previousToken === undefined) delete process.env.GH_TOKEN;
+    else process.env.GH_TOKEN = previousToken;
+  }
+  return {checks, mockedRequests, mockedDispatches};
+}
+async function selfTest() {
   const tests = [];
   const goodEvent = {action: 'labeled', sender: {login: P.owner}, label: {name: P.label}, repository: {id: P.repositoryID, full_name: P.repository},
     pull_request: {state: 'open', base: {ref: 'main'}, head: {ref: P.branch, sha: 'a'.repeat(40), repo: {id: P.repositoryID, full_name: P.repository}}}};
@@ -338,7 +492,9 @@ function selfTest() {
   checkedFixtureSummary(summary, 'ON'); tests.push('complete-fifteen-check-fixture-proof');
   for (const name of mandatory) { assert.throws(() => checkedFixtureSummary({...summary, checks: {...summary.checks, [name]: 'NOT_COMPLETED'}}, 'ON')); tests.push('reject-incomplete-fixture-' + name); }
   assert.throws(() => lineJSON('{"transportGate":"PASS"}\n{"transportGate":"PASS"}', 'transportGate', 'PASS')); tests.push('reject-ambiguous-receipts');
-  const record = {controllerSelfTestGate: 'PASS', tests: tests.length, checks: tests, networkRequests: 0, dispatches: 0, publicMutationPerformed: false};
+  const regression = await rollbackRegressionTests();
+  tests.push(...regression.checks);
+  const record = {controllerSelfTestGate: 'PASS', tests: tests.length, checks: tests, regressionTests: regression.checks.length, mockedRequests: regression.mockedRequests, mockedDispatches: regression.mockedDispatches, networkRequests: 0, dispatches: 0, publicMutationPerformed: false};
   console.log(JSON.stringify(record));
   return record;
 }
