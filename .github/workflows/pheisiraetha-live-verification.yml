@@ -100,7 +100,6 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       VERIFICATION_HEAD: ${{ github.event.pull_request.head.sha }}
-      NODE_PATH: ${{ runner.temp }}/pheisiraetha-live-tools/node_modules
     steps:
       - name: Checkout only the independently proven verification head
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
@@ -146,7 +145,7 @@ jobs:
         if: steps.runtime.outcome == 'success' && steps.archive.outcome == 'success'
         continue-on-error: true
         run: >-
-          node docs/phase2b-4/live-verification.cjs
+          NODE_PATH="$RUNNER_TEMP/pheisiraetha-live-tools/node_modules" node docs/phase2b-4/live-verification.cjs
           --overlay "$RUNNER_TEMP/pages-ON" --mode ON
           --evidence "$RUNNER_TEMP/live-evidence-ON"
           --fixtures "$RUNNER_TEMP/qualified-fixtures.cjs"
@@ -166,7 +165,7 @@ jobs:
         if: steps.rollback.outputs.rollback_published == 'true' && steps.runtime.outcome == 'success' && steps.archive.outcome == 'success'
         continue-on-error: true
         run: >-
-          node docs/phase2b-4/live-verification.cjs
+          NODE_PATH="$RUNNER_TEMP/pheisiraetha-live-tools/node_modules" node docs/phase2b-4/live-verification.cjs
           --overlay "$RUNNER_TEMP/pages-ROLLBACK" --mode ROLLBACK
           --evidence "$RUNNER_TEMP/live-evidence-ROLLBACK"
           --fixtures "$RUNNER_TEMP/qualified-fixtures.cjs"
