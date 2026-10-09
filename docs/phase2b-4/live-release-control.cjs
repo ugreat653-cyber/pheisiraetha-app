@@ -16,6 +16,13 @@ const P = Object.freeze({
   owner: 'ugreat653-cyber',
   originalMain: '255a5d9d27461dcacaebc1bc80ab322dd54b4de8',
   approvedPRHead: '77ce5dcecaa1cf5a891120daed38490d91a71d18',
+  publisherFix: Object.freeze({
+    pr: 6,
+    head: '123136499e2df88a4723fdcc5d322ff987fed2c9',
+    branch: 'phase2b-4-publisher-string-choices',
+    baseMain: '0eda0fc5c1ddf2766462caf015867e09e2c488b7',
+    sha256: 'c822994fab75d8abcd80566edad44c1682b843f40b7d248f6cf4c720798f4b7c'
+  }),
   branch: 'phase2b-4-live-verification',
   label: 'pheisiraetha-live-on-approved',
   workflow: '.github/workflows/pheisiraetha-live-verification.yml',
@@ -163,27 +170,60 @@ async function fixtureProof(head, currentRunID) {
   }
   throw new Error('No successful exact-head ON and ROLLBACK browser-mechanism proof');
 }
-async function checkMainAndPages() {
-  const [repository, pr, main, pages] = await Promise.all([api(''), api('/pulls/4'), api('/commits/main'), api('/pages')]);
+function checkedMainProvenance(repository, pr4, pr6, main, originalMerge, fixHead, comparisons, pages) {
   requireTrue(sameRepository(repository) && repository.default_branch === 'main' && repository.visibility === 'public', 'Unexpected repository identity/default branch/visibility');
-  requireTrue(pr.number === 4 && pr.merged === true && pr.head.sha === P.approvedPRHead &&
-    pr.head.ref === 'phase2b-4-pages-transport' && sameRepository(pr.head.repo) &&
-    pr.base.ref === 'main' && pr.merge_commit_sha === main.sha, 'PR4/main merge identity mismatch');
-  requireTrue(main.parents && main.parents[0] && main.parents[0].sha === P.originalMain &&
-    (main.parents.length === 1 || (main.parents.length === 2 && main.parents[1].sha === P.approvedPRHead)), 'Unexpected main parents or newer main commit');
-  const compare = await api('/compare/' + P.originalMain + '...' + main.sha);
-  requireTrue(compare.merge_base_commit && compare.merge_base_commit.sha === P.originalMain, 'Original main is not the approved base');
-  const changed = compare.files || [];
-  requireTrue(changed.length === 3 && changed.every(item => item.status === 'added' && Object.hasOwn(P.files, item.filename)), 'Main contains unapproved changed paths');
-  for (const item of changed) {
-    const file = await api('/contents/' + item.filename + '?ref=' + main.sha);
-    requireTrue(file.type === 'file' && file.encoding === 'base64' && sha(Buffer.from(file.content, 'base64')) === P.files[item.filename], 'Approved transport file bytes changed: ' + item.filename);
+  requireTrue(pr4.number === 4 && pr4.merged === true && pr4.head.sha === P.approvedPRHead &&
+    pr4.head.ref === 'phase2b-4-pages-transport' && sameRepository(pr4.head.repo) && sameRepository(pr4.base.repo) &&
+    pr4.base.ref === 'main' && pr4.merge_commit_sha === P.publisherFix.baseMain, 'Historical PR4 merge identity mismatch');
+  requireTrue(originalMerge.sha === P.publisherFix.baseMain && originalMerge.parents && originalMerge.parents.length === 2 &&
+    originalMerge.parents[0].sha === P.originalMain && originalMerge.parents[1].sha === P.approvedPRHead, 'Historical PR4 merge parents changed');
+  requireTrue(comparisons.original.merge_base_commit && comparisons.original.merge_base_commit.sha === P.originalMain, 'Original main is not the approved base');
+  const historical = comparisons.original.files || [];
+  requireTrue(historical.length === 3 && historical.every(item => item.status === 'added' && Object.hasOwn(P.files, item.filename)), 'Historical main contains unapproved changed paths');
+  requireTrue(pr6.number === P.publisherFix.pr && pr6.merged === true && pr6.head.sha === P.publisherFix.head &&
+    pr6.head.ref === P.publisherFix.branch && sameRepository(pr6.head.repo) && sameRepository(pr6.base.repo) &&
+    pr6.base.ref === 'main' && pr6.merge_commit_sha === main.sha, 'Publisher fix PR6/main merge identity mismatch');
+  requireTrue(fixHead.sha === P.publisherFix.head && fixHead.parents && fixHead.parents.length === 1 &&
+    fixHead.parents[0].sha === P.publisherFix.baseMain, 'Publisher fix head/base identity mismatch');
+  requireTrue(main.parents && main.parents[0] && main.parents[0].sha === P.publisherFix.baseMain &&
+    (main.parents.length === 1 || (main.parents.length === 2 && main.parents[1].sha === P.publisherFix.head)), 'Unexpected publisher fix main parents or newer main commit');
+  for (const comparison of [comparisons.fixHead, comparisons.current]) {
+    requireTrue(comparison.merge_base_commit && comparison.merge_base_commit.sha === P.publisherFix.baseMain, 'Publisher fix is not based on the approved PR4 merge');
+    const changed = comparison.files || [];
+    requireTrue(changed.length === 1 && changed[0].status === 'modified' && changed[0].filename === P.publisher, 'Publisher fix contains unapproved changed paths');
   }
+  requireTrue(Number.isFinite(Date.parse(pr4.merged_at)) && Number.isFinite(Date.parse(pr6.merged_at)) &&
+    Date.parse(pr6.merged_at) >= Date.parse(pr4.merged_at), 'Publisher fix merge timestamp is invalid');
   requireTrue(pages.build_type === 'workflow' && pages.https_enforced === true &&
     pages.html_url === P.target && pages.cname === null, 'Pages source/HTTPS/URL/domain differ from approval');
-  return {mainSHA: main.sha, mergeCommitSHA: pr.merge_commit_sha, mergedAt: pr.merged_at, pages: {
-    buildType: pages.build_type, httpsEnforced: pages.https_enforced, url: pages.html_url, cname: pages.cname
-  }, approvedChangedFiles: P.files};
+  return {mainSHA: main.sha, mergeCommitSHA: pr6.merge_commit_sha, mergedAt: pr6.merged_at,
+    historicalPR4MergeSHA: pr4.merge_commit_sha, publisherFixPR: pr6.number, publisherFixHead: pr6.head.sha,
+    pages: {buildType: pages.build_type, httpsEnforced: pages.https_enforced, url: pages.html_url, cname: pages.cname},
+    approvedChangedFiles: {...P.files, [P.publisher]: P.publisherFix.sha256}};
+}
+function checkedToolingDigest(filename, digest, expected) {
+  requireTrue(Object.hasOwn(expected, filename) && digest === expected[filename], 'Approved transport file bytes changed: ' + filename);
+}
+async function checkMainAndPages() {
+  const [repository, pr4, pr6, main, pages, originalMerge, fixHead] = await Promise.all([
+    api(''), api('/pulls/4'), api('/pulls/' + P.publisherFix.pr), api('/commits/main'), api('/pages'),
+    api('/commits/' + P.publisherFix.baseMain), api('/commits/' + P.publisherFix.head)
+  ]);
+  const [original, fixed, current] = await Promise.all([
+    api('/compare/' + P.originalMain + '...' + P.publisherFix.baseMain),
+    api('/compare/' + P.publisherFix.baseMain + '...' + P.publisherFix.head),
+    api('/compare/' + P.publisherFix.baseMain + '...' + main.sha)
+  ]);
+  const state = checkedMainProvenance(repository, pr4, pr6, main, originalMerge, fixHead,
+    {original, fixHead: fixed, current}, pages);
+  for (const [ref, expected] of [[P.publisherFix.baseMain, P.files], [main.sha, state.approvedChangedFiles]]) {
+    for (const filename of Object.keys(expected)) {
+      const file = await api('/contents/' + filename + '?ref=' + ref);
+      requireTrue(file.type === 'file' && file.encoding === 'base64', 'Approved transport file unavailable: ' + filename);
+      checkedToolingDigest(filename, sha(Buffer.from(file.content, 'base64')), expected);
+    }
+  }
+  return state;
 }
 async function latestPublisher(mainSHA, since) {
   const history = await api('/actions/workflows/pheisiraetha-publish-approved.yml/runs?per_page=100');
@@ -461,6 +501,97 @@ async function rollbackRegressionTests() {
   }
   return {checks, mockedRequests, mockedDispatches};
 }
+function publisherFixRegressionTests() {
+  const checks = [];
+  const repository = {id: P.repositoryID, full_name: P.repository, default_branch: 'main', visibility: 'public'};
+  const correctedMain = 'f'.repeat(40);
+  const fixture = {
+    repository,
+    pr4: {number: 4, merged: true, head: {sha: P.approvedPRHead, ref: 'phase2b-4-pages-transport', repo: repository},
+      base: {ref: 'main', repo: repository}, merge_commit_sha: P.publisherFix.baseMain, merged_at: '2026-10-09T13:21:37Z'},
+    pr6: {number: P.publisherFix.pr, merged: true, head: {sha: P.publisherFix.head, ref: P.publisherFix.branch, repo: repository},
+      base: {ref: 'main', repo: repository}, merge_commit_sha: correctedMain, merged_at: '2026-10-09T16:00:00Z'},
+    main: {sha: correctedMain, parents: [{sha: P.publisherFix.baseMain}, {sha: P.publisherFix.head}]},
+    originalMerge: {sha: P.publisherFix.baseMain, parents: [{sha: P.originalMain}, {sha: P.approvedPRHead}]},
+    fixHead: {sha: P.publisherFix.head, parents: [{sha: P.publisherFix.baseMain}]},
+    comparisons: {
+      original: {merge_base_commit: {sha: P.originalMain}, files: Object.keys(P.files).map(filename => ({filename, status: 'added'}))},
+      fixHead: {merge_base_commit: {sha: P.publisherFix.baseMain}, files: [{filename: P.publisher, status: 'modified'}]},
+      current: {merge_base_commit: {sha: P.publisherFix.baseMain}, files: [{filename: P.publisher, status: 'modified'}]}
+    },
+    pages: {build_type: 'workflow', https_enforced: true, html_url: P.target, cname: null}
+  };
+  const check = item => checkedMainProvenance(item.repository, item.pr4, item.pr6, item.main,
+    item.originalMerge, item.fixHead, item.comparisons, item.pages);
+  const state = check(fixture);
+  assert.equal(state.mainSHA, correctedMain);
+  assert.equal(state.historicalPR4MergeSHA, P.publisherFix.baseMain);
+  assert.equal(state.publisherFixHead, P.publisherFix.head);
+  assert.equal(state.mergedAt, fixture.pr6.merged_at);
+  assert.equal(state.approvedChangedFiles[P.publisher], P.publisherFix.sha256);
+  assert.equal(P.files[P.publisher], '8716314e1cfab1ea4247795f8ff53c50a5ef2cdc5cacad8eff4d4c3658219e7a');
+  checks.push('exact-PR4-history-and-PR6-correction-merge-accepted');
+  checks.push('publisher-chronology-uses-PR6-merge-time');
+  checks.push('historical-publisher-hash-preserved-and-current-hash-pinned');
+  const squash = structuredClone(fixture); squash.main.parents = [{sha: P.publisherFix.baseMain}];
+  assert.equal(check(squash).mainSHA, correctedMain);
+  checks.push('exact-PR6-squash-retains-single-approved-parent-policy');
+  const negatives = [
+    ['repository', x => { x.repository.id = 1; }],
+    ['historical-pr4-head', x => { x.pr4.head.sha = 'a'.repeat(40); }],
+    ['historical-pr4-merge', x => { x.pr4.merge_commit_sha = 'a'.repeat(40); }],
+    ['historical-pr4-parent', x => { x.originalMerge.parents[1].sha = 'a'.repeat(40); }],
+    ['historical-extra-path', x => { x.comparisons.original.files.push({filename: 'app.js', status: 'modified'}); }],
+    ['historical-file-status', x => { x.comparisons.original.files[0].status = 'modified'; }],
+    ['unmerged-publisher-fix', x => { x.pr6.merged = false; }],
+    ['publisher-fix-pr-number', x => { x.pr6.number = 7; }],
+    ['publisher-fix-head', x => { x.pr6.head.sha = 'a'.repeat(40); }],
+    ['publisher-fix-branch', x => { x.pr6.head.ref = 'other'; }],
+    ['publisher-fix-head-repository', x => { x.pr6.head.repo = {...x.repository, full_name: 'other/repo'}; }],
+    ['publisher-fix-base-repository', x => { x.pr6.base.repo = {...x.repository, id: 1}; }],
+    ['publisher-fix-base-branch', x => { x.pr6.base.ref = 'other'; }],
+    ['publisher-fix-head-commit', x => { x.fixHead.sha = 'a'.repeat(40); }],
+    ['publisher-fix-head-parent', x => { x.fixHead.parents[0].sha = 'a'.repeat(40); }],
+    ['publisher-fix-head-extra-parent', x => { x.fixHead.parents.push({sha: 'a'.repeat(40)}); }],
+    ['newer-main-commit', x => { x.main.sha = 'a'.repeat(40); }],
+    ['old-uncorrected-main', x => { x.main.sha = P.publisherFix.baseMain; }],
+    ['main-first-parent', x => { x.main.parents[0].sha = 'a'.repeat(40); }],
+    ['main-second-parent', x => { x.main.parents[1].sha = 'a'.repeat(40); }],
+    ['main-extra-parent', x => { x.main.parents.push({sha: 'a'.repeat(40)}); }],
+    ['current-extra-application-path', x => { x.comparisons.current.files.push({filename: 'app.js', status: 'modified'}); }],
+    ['current-other-tooling-path', x => { x.comparisons.current.files[0].filename = 'docs/phase2b-4/verify-pages-archive.py'; }],
+    ['current-publisher-status', x => { x.comparisons.current.files[0].status = 'added'; }],
+    ['current-comparison-base', x => { x.comparisons.current.merge_base_commit.sha = 'a'.repeat(40); }],
+    ['fix-head-extra-path', x => { x.comparisons.fixHead.files.push({filename: 'app.js', status: 'modified'}); }],
+    ['invalid-fix-merge-time', x => { x.pr6.merged_at = 'invalid'; }],
+    ['fix-merge-before-pr4', x => { x.pr6.merged_at = '2026-10-09T13:21:36Z'; }],
+    ['pages-source', x => { x.pages.build_type = 'legacy'; }],
+    ['pages-https', x => { x.pages.https_enforced = false; }]
+  ];
+  for (const [name, mutate] of negatives) {
+    const item = structuredClone(fixture); mutate(item);
+    assert.throws(() => check(item)); checks.push('reject-' + name);
+  }
+  for (const [filename, digest] of Object.entries(state.approvedChangedFiles)) checkedToolingDigest(filename, digest, state.approvedChangedFiles);
+  for (const [filename, digest] of Object.entries(P.files)) checkedToolingDigest(filename, digest, P.files);
+  checks.push('exact-historical-and-current-tooling-hashes-accepted');
+  assert.throws(() => checkedToolingDigest(P.publisher, P.files[P.publisher], state.approvedChangedFiles), /bytes changed/);
+  checks.push('reject-old-unquoted-current-publisher-hash');
+  assert.throws(() => checkedToolingDigest(P.publisher, P.publisherFix.sha256, P.files), /bytes changed/);
+  checks.push('reject-corrected-hash-in-historical-merge');
+  assert.throws(() => checkedToolingDigest(P.publisher, '0'.repeat(64), state.approvedChangedFiles), /bytes changed/);
+  checks.push('reject-unexpected-current-publisher-hash');
+  assert.throws(() => checkedToolingDigest('app.js', '0'.repeat(64), state.approvedChangedFiles), /bytes changed/);
+  checks.push('reject-unapproved-tooling-hash-path');
+  return {checks};
+}
+function publisherFixSelfTest() {
+  const regression = publisherFixRegressionTests();
+  const record = {publisherFixSelfTestGate: 'PASS', tests: regression.checks.length, checks: regression.checks,
+    networkRequests: 0, dispatches: 0, publicMutationPerformed: false};
+  console.log(JSON.stringify(record));
+  return record;
+}
 async function selfTest() {
   const tests = [];
   const goodEvent = {action: 'labeled', sender: {login: P.owner}, label: {name: P.label}, repository: {id: P.repositoryID, full_name: P.repository},
@@ -494,6 +625,8 @@ async function selfTest() {
   assert.throws(() => lineJSON('{"transportGate":"PASS"}\n{"transportGate":"PASS"}', 'transportGate', 'PASS')); tests.push('reject-ambiguous-receipts');
   const regression = await rollbackRegressionTests();
   tests.push(...regression.checks);
+  const publisherFixRegression = publisherFixRegressionTests();
+  tests.push(...publisherFixRegression.checks);
   const record = {controllerSelfTestGate: 'PASS', tests: tests.length, checks: tests, regressionTests: regression.checks.length, mockedRequests: regression.mockedRequests, mockedDispatches: regression.mockedDispatches, networkRequests: 0, dispatches: 0, publicMutationPerformed: false};
   console.log(JSON.stringify(record));
   return record;
@@ -501,6 +634,7 @@ async function selfTest() {
 async function main() {
   const args = process.argv.slice(2);
   if (args.length === 1 && args[0] === '--self-test') return selfTest();
+  if (args.length === 1 && args[0] === '--publisher-fix-self-test') return publisherFixSelfTest();
   requireTrue(args.length === 3 && ['preflight', 'rollback'].includes(args[0]) && args[1] === '--evidence', 'Usage: live-release-control.cjs preflight|rollback --evidence fresh-runner-temp-evidence-directory');
   const evidence = path.resolve(args[2]);
   requireTrue(path.isAbsolute(args[2]) && process.env.RUNNER_TEMP &&
@@ -514,5 +648,5 @@ async function main() {
     console.error(JSON.stringify(record)); process.exitCode = 1;
   }
 }
-module.exports = {P, checkedEvent, checkedTransportReceipt, checkedFixtureSummary, rollbackRequest, lineJSON, checkedPublisherRun, selfTest};
+module.exports = {P, checkedEvent, checkedTransportReceipt, checkedFixtureSummary, rollbackRequest, lineJSON, checkedPublisherRun, checkedMainProvenance, checkedToolingDigest, publisherFixSelfTest, selfTest};
 if (require.main === module) main().catch(error => { console.error(JSON.stringify({controlGate: 'FAIL', exactBlocker: error.message})); process.exitCode = 1; });
