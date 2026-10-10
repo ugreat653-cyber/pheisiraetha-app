@@ -166,6 +166,61 @@ async function assertMobileFit(page) {
       selector + ' must remain visible inside the viewport');
   }
 }
+async function assertFlowFit(page, selectors = []) {
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), true,
+    'Localized flow must fit its viewport without horizontal scrolling');
+  for (const selector of selectors) {
+    const rect = await page.locator(selector).boundingBox();
+    const viewport = page.viewportSize();
+    assert.ok(rect && rect.width > 0 && rect.x >= -1 && rect.x + rect.width <= viewport.width + 1,
+      selector + ' must be visible inside the viewport');
+    assert.equal(await page.locator(selector).evaluate(element => element.scrollWidth <= element.clientWidth + 1), true,
+      selector + ' must wrap localized text without clipping');
+  }
+}
+async function assertLocale(page, lang) {
+  const expected = await page.evaluate(code => {
+    const locale = window.PHEISIRAETHA_LOCALES[code];
+    return { htmlLang: locale.htmlLang, dir: locale.dir };
+  }, lang);
+  assert.equal(await page.locator('html').getAttribute('lang'), expected.htmlLang);
+  assert.equal(await page.locator('html').getAttribute('dir'), expected.dir);
+  assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).direction), expected.dir);
+}
+async function assertLocaleText(page, selector, lang, key) {
+  assert.equal(await page.locator(selector).textContent(), await localized(page, lang, key),
+    lang + '.' + key + ' must render without fallback');
+}
+async function assertRISHelp(page, lang) {
+  for (const key of RIS_FIELDS) {
+    const helpID = await page.locator('#' + key).getAttribute('aria-describedby');
+    assert.equal(helpID, key + 'Help', 'Each RIS field keeps an accessible explanation');
+    await assertLocaleText(page, '#' + helpID, lang, key + 'Help');
+    assert.equal(await page.locator('#' + key).getAttribute('dir'), 'auto',
+      'User-entered RIS remains direction-aware');
+  }
+  await assertFlowFit(page, RIS_FIELDS.flatMap(key => ['#' + key, '#' + key + 'Help']));
+}
+async function assertCanonicalEmptyDTO(page) {
+  const witness = await page.evaluate(key => {
+    const dto = window.PHEISIRAETHA_ANALYTICS_V1.evaluate(JSON.parse(localStorage.getItem(key)));
+    return {
+      dtoVersion: dto.dtoVersion, mode: dto.mode, lang: dto.lang, dir: dto.dir,
+      frozen: Object.isFrozen(dto) && Object.isFrozen(dto.components) && dto.components.every(Object.isFrozen),
+      components: dto.components.map(component => ({
+        templateId: component.templateId, text: component.text, surface: component.surface, role: component.role
+      }))
+    };
+  }, STORAGE);
+  assert.deepEqual(witness, {
+    dtoVersion: 'pheisiraetha-render-v1', mode: 'FALLBACK_ONLY', lang: 'en', dir: 'ltr', frozen: true,
+    components: [{
+      templateId: 'safety.fallback.noInterpretationOrNextFocus',
+      text: 'No interpretation or next focus is shown here.', surface: 'FALLBACK', role: 'FALLBACK'
+    }]
+  }, 'UI translations never change the frozen canonical DTO or add interpretation');
+}
+
 async function runCase(name, callback, { record, lang = 'en', onboarding = true, fixtureMode = 'ON' } = {}) {
   const options = PROFILE === 'iphone-webkit'
     ? { ...devices['iPhone 13'], locale: lang === 'ru' ? 'ru-RU' : 'en-GB' }
@@ -204,12 +259,14 @@ async function runCase(name, callback, { record, lang = 'en', onboarding = true,
     assert.deepEqual(externalRequests, [], 'UX flow must make no external requests');
     const storageKeys = await page.evaluate(() => Object.keys(localStorage).sort());
     assert.ok(storageKeys.every(key => [STORAGE, LANGUAGE, ONBOARDING].includes(key)), 'No new persistent storage keys');
-    result = { name, fixtureMode, status: 'PASS', runtimeErrors: errors, externalRequests, storageKeys };
+    assert.deepEqual(await context.cookies(), [], 'No unexpected cookies');
+    assert.deepEqual(await page.evaluate(() => Object.keys(sessionStorage).sort()), ['ux-test-seeded'], 'No application session storage keys');
+    result = { name, language: lang, fixtureMode, status: 'PASS', runtimeErrors: errors, externalRequests, storageKeys };
   } catch (error) {
     const prefix = name.replace(/[^a-z0-9-]+/gi, '-');
     await fs.writeFile(path.join(OUT, prefix + '.html'), await page.content()).catch(() => {});
     await page.screenshot({ path: path.join(OUT, prefix + '.png'), fullPage: true }).catch(() => {});
-    result = { name, fixtureMode, status: 'FAIL', error: String(error.stack || error), runtimeErrors: errors, externalRequests };
+    result = { name, language: lang, fixtureMode, status: 'FAIL', error: String(error.stack || error), runtimeErrors: errors, externalRequests };
   } finally {
     await context.close();
   }
@@ -599,6 +656,208 @@ async function main() {
     await equalStored(page, before);
   }, { record: existingRecord(), lang: 'ru', fixtureMode: 'OFF' });
 
+
+  const newLocaleKeys = [
+    'risSaveFailed', 'analyticsEmpty', 'firstCheckinTitle', 'firstCheckinIntro',
+    'continueFirstCheckin', 'finishLater', 'startFirstCheckin', 'noCheckinSummary',
+    'checkinInvalid', 'firstCheckinSnapshotIntro', 'firstCheckinReviewIntro',
+    'checkinSaveFailed'
+  ];
+  const localeContext = { window: {} };
+  require('node:vm').runInNewContext(await fs.readFile(path.join(ROOT, 'locales.js'), 'utf8'), localeContext);
+  const supportedLocales = Object.keys(localeContext.window.PHEISIRAETHA_LOCALES);
+  assert.equal(supportedLocales.length, 31);
+  for (const lang of supportedLocales) {
+    await runCase('locale-' + lang + '-first-run-help-handoff-resume-storage-errors', async page => {
+      await assertLocale(page, lang);
+      const dictionary = await page.evaluate(code => {
+        const locale = window.PHEISIRAETHA_LOCALES[code];
+        return { translations: locale.translations, frozen: Object.isFrozen(locale.translations) && Object.isFrozen(locale) };
+      }, lang);
+      assert.equal(dictionary.frozen, true);
+      for (const key of [...newLocaleKeys, ...RIS_FIELDS.map(field => field + 'Help')]) {
+        assert.equal(typeof dictionary.translations[key], 'string', lang + '.' + key);
+        assert.ok(dictionary.translations[key].trim(), lang + '.' + key);
+        if (lang !== 'en')
+          assert.notEqual(dictionary.translations[key], await localized(page, 'en', key), 'No English fallback: ' + lang + '.' + key);
+      }
+      await page.locator('#onboardingSkip').click();
+      await page.locator('#createGoal').click();
+      await assertRISHelp(page, lang);
+      await fillRIS(page);
+      const unsaved = await stored(page);
+      await installStorageFailure(page);
+      await page.locator('#risSave').click();
+      await equalStored(page, unsaved);
+      await assertLocaleText(page, '#risMsg', lang, 'risSaveFailed');
+      assert.equal(await page.locator('#continueFirstCheckin').count(), 0);
+      for (const key of RIS_FIELDS) assert.equal(await page.locator('#' + key).inputValue(), RIS[key]);
+      await removeStorageFailure(page);
+      await page.locator('#risSave').click();
+      await page.locator('#continueFirstCheckin').waitFor({ state: 'visible' });
+      const saved = await stored(page);
+      await cycles(page, 0);
+      await assertLocaleText(page, 'main h1', lang, 'firstCheckinTitle');
+      await assertLocaleText(page, 'main .hero .muted', lang, 'firstCheckinIntro');
+      await assertLocaleText(page, '#continueFirstCheckin', lang, 'continueFirstCheckin');
+      await assertLocaleText(page, '#finishFirstCheckinLater', lang, 'finishLater');
+      await assertMobileFit(page);
+      await assertFlowFit(page, ['#continueFirstCheckin', '#finishFirstCheckinLater']);
+      await page.locator('#continueFirstCheckin').click();
+      await step(page, 2);
+      assert.ok((await page.locator('main').textContent()).includes(dictionary.translations.firstCheckinSnapshotIntro));
+      await page.locator('#hours').fill('169');
+      const invalid = page.waitForEvent('dialog');
+      page.once('dialog', dialog => dialog.accept());
+      await page.locator('#wizNext').click();
+      assert.equal((await invalid).message(), dictionary.translations.checkinInvalid);
+      await step(page, 2);
+      await equalStored(page, saved);
+      await clickWithDialog(page, '#wizCancel', true);
+      await equalStored(page, saved);
+      await assertCanonicalEmptyDTO(page);
+      await page.locator('#analyticsHost > section').waitFor({ state: 'visible' });
+      const localeMetadata = await page.evaluate(code => ({
+        htmlLang: window.PHEISIRAETHA_LOCALES[code].htmlLang,
+        dir: window.PHEISIRAETHA_LOCALES[code].dir
+      }), lang);
+      assert.equal(await page.locator('#analyticsHost > section').getAttribute('lang'), localeMetadata.htmlLang);
+      assert.equal(await page.locator('#analyticsHost > section').getAttribute('dir'), localeMetadata.dir);
+      await assertLocaleText(page, '#analyticsHost p', lang, 'analyticsEmpty');
+      await page.locator('#startCheckin').click();
+      await step(page, 1);
+      await assertRISHelp(page, lang);
+      assert.ok((await page.locator('main').textContent()).includes(dictionary.translations.firstCheckinReviewIntro));
+      await page.locator('#wizNext').click();
+      await step(page, 2);
+      await toRevision(page);
+      await installStorageFailure(page);
+      await page.locator('#wizComplete').click();
+      await step(page, 4);
+      await assertLocaleText(page, '#wizMsg', lang, 'checkinSaveFailed');
+      await equalStored(page, saved);
+      await removeStorageFailure(page);
+      await clickWithDialog(page, '#wizCancel', true);
+      await assertLocaleText(page, '#firstCheckinHomeTitle', lang, 'startFirstCheckin');
+      assert.ok((await page.locator('main').textContent()).includes(dictionary.translations.noCheckinSummary));
+      await assertLocaleText(page, '#startCheckin', lang, 'continueFirstCheckin');
+      await assertCanonicalEmptyDTO(page);
+      await equalStored(page, saved);
+      await page.reload({ waitUntil: 'networkidle' });
+      await assertLocale(page, lang);
+      await equalStored(page, saved);
+      await page.locator('#startCheckin').click();
+      await step(page, 1);
+      assert.ok((await page.locator('main').textContent()).includes(dictionary.translations.firstCheckinReviewIntro));
+      await assertRISHelp(page, lang);
+      for (const key of RIS_FIELDS) assert.equal(await page.locator('#' + key).inputValue(), RIS[key]);
+      await clickWithDialog(page, '#wizCancel', true);
+      await equalStored(page, saved);
+      await page.locator('[data-nav="history"]').click();
+      assert.equal(await page.locator('.timeline .event').count(), 0);
+      await assertLocaleText(page, '#historyFirstCheckin', lang, 'continueFirstCheckin');
+      await page.locator('#historyFirstCheckin').click();
+      await step(page, 1);
+      await equalStored(page, saved);
+    }, { lang, onboarding: false });
+  }
+
+  for (const lang of ['ar', 'he']) {
+    await runCase(lang + '-RTL-onboarding-new-RIS-finish-later-resume-cancel-valid-save', async page => {
+      const values = lang === 'ar' ? {
+        primary: 'قراءة كتاب مع مجموعة صغيرة',
+        success: 'اجتماع واحد مع ثلاثة مشاركين',
+        scope: 'كتاب واحد واجتماع واحد',
+        nonGoals: 'لا فعالية عامة ولا قائمة بريدية',
+        constraints: 'ساعتان أسبوعيا مع حفظ الخصوصية',
+        rationale: 'أريد تخصيص وقت منتظم للقراءة'
+      } : {
+        primary: 'קריאת ספר עם קבוצה קטנה',
+        success: 'פגישה אחת עם שלושה משתתפים',
+        scope: 'ספר אחד ופגישה אחת',
+        nonGoals: 'ללא אירוע ציבורי וללא רשימת תפוצה',
+        constraints: 'שעתיים בשבוע ושמירה על הפרטיות',
+        rationale: 'אני רוצה להקדיש זמן קבוע לקריאה'
+      };
+      await assertLocale(page, lang);
+      for (let index = 0; index < 3; index++) {
+        await assertFlowFit(page, ['#onboardingNext', '#onboardingSkip']);
+        await page.locator('#onboardingNext').click();
+      }
+      await assertFlowFit(page, ['#onboardingStart']);
+      await page.screenshot({ path: path.join(OUT, lang + '-RTL-onboarding.png'), fullPage: true });
+      await page.locator('#onboardingStart').click();
+      await page.locator('#createGoal').click();
+      await assertRISHelp(page, lang);
+      await fillRIS(page, values);
+      for (const key of RIS_FIELDS)
+        assert.equal(await page.locator('#' + key).evaluate(element => getComputedStyle(element).direction), 'rtl');
+      await page.locator('#risSave').click();
+      await page.locator('#continueFirstCheckin').waitFor({ state: 'visible' });
+      await assertLocale(page, lang);
+      await assertMobileFit(page);
+      await assertFlowFit(page, ['#continueFirstCheckin', '#finishFirstCheckinLater']);
+      await page.screenshot({ path: path.join(OUT, lang + '-RTL-saved-RIS.png'), fullPage: true });
+      const saved = await stored(page);
+      assert.deepEqual(saved.intent.ris, values);
+      await cycles(page, 0);
+      await page.locator('#finishFirstCheckinLater').click();
+      await equalStored(page, saved);
+      await page.reload({ waitUntil: 'networkidle' });
+      await equalStored(page, saved);
+      await assertLocale(page, lang);
+      await assertFlowFit(page, ['#startCheckin']);
+      await page.locator('[data-nav="history"]').click();
+      assert.equal(await page.locator('.timeline .event').count(), 0);
+      await assertFlowFit(page, ['#historyFirstCheckin']);
+      await page.locator('#historyFirstCheckin').click();
+      await step(page, 1);
+      await assertRISHelp(page, lang);
+      for (const key of RIS_FIELDS) assert.equal(await page.locator('#' + key).inputValue(), values[key]);
+      await page.locator('#wizNext').click();
+      await step(page, 2);
+      assert.equal(await page.locator('#hours').getAttribute('dir'), 'ltr', 'Numeric input stays left-to-right in RTL UI');
+      const draft = lang === 'ar' ? 'قراءة الفصل الأول' : 'קריאת הפרק הראשון';
+      await page.locator('#actions').fill(draft);
+      await assertFlowFit(page, ['#wizNext', '#wizBack', '#wizCancel', '#actions', '#hours']);
+      await page.locator('#wizBack').click();
+      await step(page, 1);
+      await page.locator('#wizNext').click();
+      await step(page, 2);
+      assert.equal(await page.locator('#actions').inputValue(), draft);
+      await clickWithDialog(page, '#wizCancel', false);
+      await step(page, 2);
+      assert.equal(await page.locator('#actions').inputValue(), draft);
+      await clickWithDialog(page, '#wizCancel', true);
+      await equalStored(page, saved);
+      await page.locator('#startCheckin').click();
+      await step(page, 1);
+      await page.locator('#wizNext').click();
+      await step(page, 2);
+      assert.equal(await page.locator('#actions').inputValue(), '');
+      await toRevision(page);
+      await assertFlowFit(page, ['#wizComplete', '#wizCancel']);
+      await cycles(page, 0);
+      await complete(page);
+      await cycles(page, 1);
+      const after = await stored(page);
+      assert.deepEqual(after.intent.ris, values);
+      assert.deepEqual(after.intent.cycles[0].cie, values);
+      assert.equal(after.intent.id, saved.intent.id);
+      assert.equal(after.intent.createdAt, saved.intent.createdAt);
+      await page.locator('[data-nav="history"]').click();
+      assert.equal(await page.locator('.timeline .event').count(), 1);
+      const timeline = await page.locator('.timeline').evaluate(element => {
+        const style = getComputedStyle(element);
+        return { direction: style.direction, right: parseFloat(style.borderRightWidth), left: parseFloat(style.borderLeftWidth) };
+      });
+      assert.deepEqual(timeline, { direction: 'rtl', right: 2, left: 0 }, 'History keeps RTL logical timeline alignment');
+      await assertFlowFit(page);
+      await page.screenshot({ path: path.join(OUT, lang + '-RTL-completed-History.png'), fullPage: true });
+    }, { lang, onboarding: false });
+  }
+  assert.equal(results.length, 52, '19 accepted regressions + 31 locale flows + 2 complete RTL flows');
+
   assert.equal(await fs.readFile(path.join(ROOT, 'app.js'), 'utf8'), sourceApp, 'Harness must not rewrite source');
   assert.equal(await fs.readFile(path.join(ROOT, 'index.html'), 'utf8'), sourceIndex, 'Harness must not rewrite entry');
   assert.equal(crypto.createHash('sha256').update(await fs.readFile(path.join(ROOT, ARTIFACT_PATH))).digest('hex'), ARTIFACT_SHA, 'Artifact remains untouched');
@@ -608,8 +867,9 @@ async function main() {
   const failed = results.filter(item => item.status !== 'PASS');
   const report = {
     status: failed.length ? 'FAIL' : 'PASS',
-    scope: 'Separate draft UX branch based on qualified public candidate; no release archives, frozen verifiers or public deployment',
+    scope: 'Separate development/public-on integration; first check-in, 31 locales and RTL emulated browser profiles; no release archives, frozen verifiers or public deployment',
     fixtureDisclaimer: 'ON cases activate only an in-memory HTTP fixture response and load the existing frozen artifact. Source app/index and approved archives are never rewritten; this is not a release build or qualification rerun.',
+    localization: { supported: supportedLocales, newKeys: newLocaleKeys, RISHelpKeys: RIS_FIELDS.map(field => field + 'Help'), allLocaleBrowserFlows: 31, dedicatedRTLFlows: ['ar', 'he'] },
     sourceDefaultAnalyticsFlag: 'OFF',
     originalArtifactSHA256: ARTIFACT_SHA,
     originalArtifactBytes: artifactBytes.length,
