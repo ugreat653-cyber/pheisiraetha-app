@@ -180,8 +180,8 @@
     render();
   }
 
-  function persist(){
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  function persist(nextState=state){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
     analyticsCommittedStateValid=true;
   }
 
@@ -326,11 +326,14 @@
     if(!ANALYTICS_ENABLED || dto.mode==='UNAVAILABLE') return null;
     const root=document.createElement('section');
     root.className='card';
-    root.lang='en';
+    const russianEmpty=
+      currentLang==='ru' && dto.mode==='FALLBACK_ONLY' && dto.texts.length===1 &&
+      dto.texts[0]==='No interpretation or next focus is shown here.';
+    root.lang=russianEmpty ? 'ru' : 'en';
     root.dir='ltr';
     for(const text of dto.texts){
       const paragraph=document.createElement('p');
-      paragraph.textContent=text;
+      paragraph.textContent=russianEmpty ? t('analyticsEmpty') : text;
       root.appendChild(paragraph);
     }
     return root;
@@ -564,6 +567,7 @@
     }
 
     if(view==='ris') app.innerHTML = shell(renderRIS());
+    else if(view==='first-checkin') app.innerHTML = shell(renderFirstCheckin());
     else if(view==='wizard') app.innerHTML = shell(renderWizard());
     else if(view==='history') app.innerHTML = shell(renderHistory());
     else if(view==='data') app.innerHTML = shell(renderData());
@@ -697,10 +701,17 @@
 
     return `<section class="hero"><span class="kicker">${t('activeGoal')}</span><h1 dir="auto">${esc(state.intent.ris.primary)}</h1><p class="muted" dir="auto">${esc(state.intent.ris.success)}</p></section>
 
+      ${c.length===0 ? `
+      <section class="card" aria-labelledby="firstCheckinHomeTitle">
+        <h2 id="firstCheckinHomeTitle">${t('startFirstCheckin')}</h2>
+        <p class="muted">${t('noCheckinSummary')}</p>
+        <button class="btn primary" id="startCheckin">${t('continueFirstCheckin')}</button>
+      </section>
+      <button class="btn secondary" id="editGoal">${t('editIntent')}</button>` : `
       <div class="grid">
         <button class="btn primary" id="startCheckin">${t('checkin')}</button>
         <button class="btn secondary" id="editGoal">${t('editIntent')}</button>
-      </div>
+      </div>`}
 
       <div class="card flat">
         <div class="row">
@@ -786,22 +797,31 @@
     </div>`;
   }
 
-  function startWizard(){
+  function renderFirstCheckin(){
+    return `<section class="hero">
+      <h1>${t('firstCheckinTitle')}</h1>
+      <p class="muted">${t('firstCheckinIntro')}</p>
+    </section>
+    <div class="card flat">
+      <h2 dir="auto">${esc(state.intent.ris.primary)}</h2>
+      <p dir="auto">${esc(state.intent.ris.success)}</p>
+      <div class="stack">
+        <button class="btn primary" id="continueFirstCheckin">${t('continueFirstCheckin')}</button>
+        <button class="btn secondary" id="finishFirstCheckinLater">${t('finishLater')}</button>
+      </div>
+    </div>`;
+  }
+
+  function startWizard({continueNewRIS=false}={}){
 
     invalidateAnalytics();
-    const r = state.intent.ris;
+    const firstCheckin=(state.intent.cycles || []).length===0;
 
     wizard = {
-      step:1,
+      step:continueNewRIS && firstCheckin ? 2 : 1,
+      firstCheckin,
 
-      cie:{
-        primary:'',
-        success:'',
-        scope:'',
-        nonGoals:'',
-        constraints:'',
-        rationale:''
-      },
+      cie:firstCheckin ? risValues(state.intent.ris) : risValues(),
 
       iep:{
         desire:5,
@@ -867,6 +887,8 @@
     <div class="progress" role="progressbar" aria-label="${esc(labels[step-1])}" aria-valuemin="1" aria-valuemax="4" aria-valuenow="${step}">
       <span style="width:${step*25}%"></span>
     </div>
+
+    ${wizard.firstCheckin && step<=2 ? `<p class="muted">${t(step===1 ? 'firstCheckinReviewIntro' : 'firstCheckinSnapshotIntro')}</p>` : ''}
 
     ${body}`;
   }
@@ -1249,9 +1271,11 @@
 
       </div>`
       :
-      `<div class="card empty">
-        ${t('noHistory')}
-      </div>`
+      `<section class="card empty">
+        <h2>${t('noHistory')}</h2>
+        <p class="muted">${t('noCheckinSummary')}</p>
+        <button class="btn primary" id="historyFirstCheckin">${t('continueFirstCheckin')}</button>
+      </section>`
     }`;
   }
 
@@ -1358,10 +1382,16 @@
       }
     );
 
-    $('#startCheckin')?.addEventListener(
-      'click',
-      startWizard
+    $('#startCheckin')?.addEventListener('click',()=>startWizard());
+    $('#historyFirstCheckin')?.addEventListener('click',()=>startWizard());
+    $('#continueFirstCheckin')?.addEventListener('click',()=>
+      startWizard({continueNewRIS:true})
     );
+    $('#finishFirstCheckinLater')?.addEventListener('click',()=>{
+      invalidateAnalytics();
+      view='home';
+      renderAndFocusHeading();
+    });
   }
 
   function bindRIS(){
@@ -1404,41 +1434,27 @@
 
         const existed=!!state.intent;
 
+        const nextState={
+          ...state,
+          intent:existed
+            ? {...state.intent,ris:r}
+            : {id:uid(),createdAt:now(),ris:r,cycles:[]}
+        };
+
         invalidateAnalyticsForMutation();
-        if(!state.intent){
-
-          state.intent={
-            id:uid(),
-            createdAt:now(),
-            ris:r,
-            cycles:[]
-          };
-
-        } else {
-
-          state.intent.ris=r;
+        try{
+          persist(nextState);
+        }catch{
+          $('#risMsg').textContent=t('risSaveFailed');
+          $('#risMsg').className='badge-danger';
+          $('#risMsg').setAttribute('role','alert');
+          return;
         }
 
-        persist();
-
+        state=nextState;
         risDraft=null;
-
-        $('#risMsg').textContent=
-          existed
-          ? t('updated')
-          : t('created');
-
-        $('#risMsg').className='badge-ok';
-
-        $('#risMsg').setAttribute('role','status');
-
-        setTimeout(
-          ()=>{
-            view='home';
-            renderAndFocusHeading();
-          },
-          450
-        );
+        view=existed ? 'home' : 'first-checkin';
+        renderAndFocusHeading();
       }
     );
   }
@@ -1551,7 +1567,9 @@
       wizard.iep.actions=textValue('actions');
       wizard.iep.hours=Number($('#hours').value||0);
 
-      return true;
+      return ['desire','belief','emotionIntensity','mental','practical']
+        .every(k=>isNumberIn(wizard.iep[k],0,10)) &&
+        isNumberIn(wizard.iep.hours,0,168) && $('#hours').checkValidity();
     }
 
     if(wizard.step===3){
@@ -1629,9 +1647,10 @@
 
         if(!saveStep()){
 
-          alert(t('required'));
+          alert(t(wizard.step===2 ? 'checkinInvalid' : 'required'));
 
-          markRequiredTextFields();
+          if(wizard.step===2) $('#hours').reportValidity();
+          else markRequiredTextFields();
 
           return;
         }
@@ -1722,7 +1741,6 @@
           revision:{}
         };
 
-        invalidateAnalyticsForMutation();
         if(wizard.intentional==='yes'){
 
           wizard.selected.forEach(
@@ -1737,16 +1755,43 @@
                 .trim();
 
               cycle.revision[k]=v;
-
-              state.intent.ris[k]=v;
             }
           );
         }
 
-        state.intent.cycles.push(cycle);
+        if(
+          !isValidCycle(cycle) ||
+          RIS_FIELDS.some(k=>!cycle.cie[k].trim()) ||
+          Object.values(cycle.revision).some(v=>!v.trim())
+        ){
+          $('#wizMsg').textContent=t('checkinInvalid');
+          $('#wizMsg').className='badge-danger';
+          $('#wizMsg').setAttribute('role','alert');
+          return;
+        }
 
-        persist();
+        const nextState={
+          ...state,
+          intent:{
+            ...state.intent,
+            ris:cycle.intentional==='yes'
+              ? {...state.intent.ris,...cycle.revision}
+              : state.intent.ris,
+            cycles:[...(state.intent.cycles || []),cycle]
+          }
+        };
 
+        invalidateAnalyticsForMutation();
+        try{
+          persist(nextState);
+        }catch{
+          $('#wizMsg').textContent=t('checkinSaveFailed');
+          $('#wizMsg').className='badge-danger';
+          $('#wizMsg').setAttribute('role','alert');
+          return;
+        }
+
+        state=nextState;
         wizard=null;
 
         view='home';
