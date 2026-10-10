@@ -897,7 +897,7 @@
 
     const r=wizard.cie;
 
-    return `<p class="muted">${t('cieIntro')}</p>
+    return `${wizard.firstCheckin ? '' : `<p class="muted">${t('cieIntro')}</p>`}
 
     <div class="card flat">
 
