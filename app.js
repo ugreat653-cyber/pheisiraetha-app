@@ -326,14 +326,14 @@
     if(!ANALYTICS_ENABLED || dto.mode==='UNAVAILABLE') return null;
     const root=document.createElement('section');
     root.className='card';
-    const russianEmpty=
-      currentLang==='ru' && dto.mode==='FALLBACK_ONLY' && dto.texts.length===1 &&
+    const localizedEmpty=
+      dto.mode==='FALLBACK_ONLY' && dto.texts.length===1 &&
       dto.texts[0]==='No interpretation or next focus is shown here.';
-    root.lang=russianEmpty ? 'ru' : 'en';
-    root.dir='ltr';
+    root.lang=localizedEmpty ? LOCALES[currentLang].htmlLang : 'en';
+    root.dir=localizedEmpty ? LOCALES[currentLang].dir : 'ltr';
     for(const text of dto.texts){
       const paragraph=document.createElement('p');
-      paragraph.textContent=russianEmpty ? t('analyticsEmpty') : text;
+      paragraph.textContent=localizedEmpty ? t('analyticsEmpty') : text;
       root.appendChild(paragraph);
     }
     return root;
