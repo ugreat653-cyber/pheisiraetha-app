@@ -1,26 +1,54 @@
 name: PHEISIRAETHA first check-in UX regression
 on:
   pull_request:
-    branches: [phase2b-4-public-release-proposal]
-    types: [opened, synchronize, reopened]
-    paths:
-      - app.js
-      - app.css
-      - locales.js
-      - docs/first-checkin-ux/**
-      - .github/workflows/pheisiraetha-first-checkin-ux.yml
+    branches: [development/public-on]
+    types: [opened, synchronize, reopened, ready_for_review]
 permissions:
   contents: read
 concurrency:
-  group: pheisiraetha-first-checkin-${{ github.event.pull_request.number }}
+  group: pheisiraetha-first-checkin-integration-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 jobs:
-  focused-ux:
-    name: first check-in (${{ matrix.profile }})
+  development-gate:
+    name: development baseline and frozen source gate
     if: >-
       github.repository == 'ugreat653-cyber/pheisiraetha-app' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.head.ref == 'fix/first-checkin-ux'
+      github.event.pull_request.head.ref == 'integration/first-checkin-31-locales'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact integration head with read-only history
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Use the existing CI Node version
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903
+        with:
+          node-version: '24.19.0'
+      - name: Require approved source, UX lineage, locale-only changes and unchanged frozen files
+        env:
+          TESTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          TESTED_BASE: ${{ github.event.pull_request.base.sha }}
+          UX_GATE_EVIDENCE: ${{ runner.temp }}/development-integration-gate
+        run: node docs/first-checkin-ux/verify-development-integration.cjs
+      - name: Preserve exact integration gate evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pheisiraetha-development-gate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/development-integration-gate/
+          if-no-files-found: warn
+          retention-days: 14
+  focused-ux:
+    name: first check-in (${{ matrix.profile }})
+    needs: development-gate
+    if: >-
+      github.repository == 'ugreat653-cyber/pheisiraetha-app' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'integration/first-checkin-31-locales'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
@@ -28,7 +56,7 @@ jobs:
       matrix:
         profile: [desktop-chrome, samsung-chrome, iphone-webkit]
     steps:
-      - name: Checkout only the separate draft UX head
+      - name: Checkout only the exact integration head
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         with:
           ref: ${{ github.event.pull_request.head.sha }}
@@ -60,7 +88,7 @@ jobs:
         run: |
           set -euo pipefail
           node "$RUNNER_TEMP/pheisiraetha-ux-tools/node_modules/playwright/cli.js" install --with-deps webkit
-      - name: Run only focused first check-in browser scenarios
+      - name: Run focused first check-in, 31-locale and Arabic/Hebrew RTL scenarios
         env:
           NODE_PATH: ${{ runner.temp }}/pheisiraetha-ux-tools/node_modules
           UX_CHROME: /opt/google/chrome/chrome
