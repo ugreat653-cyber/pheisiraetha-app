@@ -1,7 +1,7 @@
 name: PHEISI isolated data foundation
 on:
   pull_request:
-    branches: [development/public-on]
+    branches: [development/public-on, review/pheisi-v2-frozen-preview]
     types: [opened, synchronize, reopened]
     paths:
       - 'product-v2/**'
@@ -86,6 +86,22 @@ jobs:
           stage="$RUNNER_TEMP/pheisi-frozen/mobile-preview"
           node product-v2/verify-frozen-preview.cjs --stage "$stage"
           node "$stage/build-preview.cjs"
+          node --test --test-reporter=spec "$stage/tests/mobile-preview.test.cjs"
+          node product-v2/verify-frozen-preview.cjs --result "$stage/test-results/MOBILE_PREVIEW_RESULT.json"
+          node product-v2/verify-frozen-preview.cjs
+
+      - name: Qualify separate hosted-offline candidate locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PREVIEW_PLAYWRIGHT="$RUNNER_TEMP/pheisi-preview-tools/node_modules/playwright"
+          export PLAYWRIGHT_BROWSERS_PATH="$RUNNER_TEMP/pheisi-browsers"
+          export PREVIEW_PROFILES=desktop,samsung,iphone-webkit
+          unset PREVIEW_CASES
+          stage="$RUNNER_TEMP/pheisi-hosted-offline/mobile-preview"
+          node product-v2/hosted-offline/build.cjs "$stage"
+          export PHEISI_OFFLINE_ROOT="$stage"
+          node --test --test-reporter=spec product-v2/hosted-offline/worker.test.cjs
           node --test --test-reporter=spec "$stage/tests/mobile-preview.test.cjs"
           node product-v2/verify-frozen-preview.cjs --result "$stage/test-results/MOBILE_PREVIEW_RESULT.json"
           node product-v2/verify-frozen-preview.cjs
