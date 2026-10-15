@@ -1,0 +1,107 @@
+{
+  "harnessSha256": "1a80492d4394045b3459c53c98f8ec244a463497b5125462b4b155b2cb5109f3",
+  "scope": "Actual separate Sites origin; synthetic new browser contexts; service-access authentication",
+  "physicalDeviceTests": false,
+  "results": [
+    {
+      "name": "actual-host-routing-and-nine-static-byte-bindings",
+      "status": "PASS"
+    },
+    {
+      "profile": "desktop",
+      "name": "hosted-positive",
+      "status": "FAIL",
+      "error": "Hosted worker activation: undefined"
+    },
+    {
+      "profile": "samsung",
+      "name": "hosted-positive",
+      "status": "FAIL",
+      "error": "Hosted worker activation: undefined"
+    },
+    {
+      "profile": "iphone-webkit",
+      "name": "hosted-positive",
+      "status": "FAIL",
+      "error": "Hosted worker activation: undefined"
+    },
+    {
+      "name": "actual-host-worker-rejects-corrupt",
+      "status": "FAIL",
+      "error": "Fault must finish actual worker installation: undefined"
+    },
+    {
+      "name": "actual-host-worker-rejects-redirect",
+      "status": "FAIL",
+      "error": "Fault must finish actual worker installation: undefined"
+    },
+    {
+      "name": "actual-host-worker-rejects-auth-html",
+      "status": "FAIL",
+      "error": "Fault must finish actual worker installation: undefined"
+    },
+    {
+      "name": "actual-host-worker-rejects-auth-html-200",
+      "status": "FAIL",
+      "error": "Fault must finish actual worker installation: undefined"
+    },
+    {
+      "name": "actual-host-worker-rejects-abort",
+      "status": "FAIL",
+      "error": "Fault must finish actual worker installation: undefined"
+    }
+  ],
+  "origin": "https://pheisi-v2-hosted-offline-20261015.shrewdalder64.chatgpt.site",
+  "projectId": "appgprj_6ad1432fd3608191b240f03b8aa8d970",
+  "sourceCommit": "b0f05d1b9e05b85361bf2a972cc532d321bb2a18",
+  "deploymentId": "appgdep_6ad1454b07b081919bad221a7f5380f4",
+  "workerSha256": "9e130d12820fb06faa0e255afc59734a493461165a36db03841c436d0e74509c",
+  "offlinePolicy": "embedded-shell-v1",
+  "assetDigest": "c31387f2ae30830ee8668a788c989fbdf3c35132b0dbb2089dbbc0e6ee599991",
+  "hosting": {
+    "indexStatus": 307,
+    "rootBytes": 2010,
+    "sourceShellBytes": 1072
+  },
+  "staticAssets": [
+    {
+      "path": "app.css",
+      "sha256": "95d12899a06bc778f9421bf90b207c05454a588321907f1dfbebab6fdefcfab9"
+    },
+    {
+      "path": "app.js",
+      "sha256": "a12b7147004228d1906a412126429fa8de9637a9ed88f4e8dc33a0ee1de2ebf0"
+    },
+    {
+      "path": "foundation.mjs",
+      "sha256": "eb33bd8c39ed94a52d4fbeb2196d1fa6f5c44771d5307b73906c260c023e0de8"
+    },
+    {
+      "path": "icon-192.png",
+      "sha256": "f46acccdbfbd3a2cfe856465d56867dd6c94288e059fdfd3cb1897e7067356bf"
+    },
+    {
+      "path": "icon-512.png",
+      "sha256": "b93cd8d5f742f07b22de6ed6ee503edd6fcfbf2c8897b7402d72f82062990788"
+    },
+    {
+      "path": "manifest.webmanifest",
+      "sha256": "762dbdb5ee2449b6d7db7a33227c74a027eff918d05343875967d9813d12bd76"
+    },
+    {
+      "path": "preview-store.mjs",
+      "sha256": "606643f08266468cf48c949ebecc768d86f29e09c7a9f9206a2d33a8c3512eff"
+    },
+    {
+      "path": "register-sw.js",
+      "sha256": "f3d584fd1df88df6b4bf4b6b7075fd9f3d0a8d4560aea30cee3ee9a075538bc7"
+    },
+    {
+      "path": "sw.js",
+      "sha256": "9e130d12820fb06faa0e255afc59734a493461165a36db03841c436d0e74509c"
+    }
+  ],
+  "passed": 1,
+  "failed": 8,
+  "status": "FAIL"
+}

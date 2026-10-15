@@ -1,0 +1,42 @@
+{
+  "status": "BLOCKED_SERVICE_WORKER_SCRIPT_AUTH",
+  "hostedOfflinePass": false,
+  "projectId": "appgprj_6ad1432fd3608191b240f03b8aa8d970",
+  "siteVersion": 1,
+  "sourceCommit": "b0f05d1b9e05b85361bf2a972cc532d321bb2a18",
+  "deploymentId": "appgdep_6ad1454b07b081919bad221a7f5380f4",
+  "url": "https://pheisi-v2-hosted-offline-20261015.shrewdalder64.chatgpt.site",
+  "workerSha256": "9e130d12820fb06faa0e255afc59734a493461165a36db03841c436d0e74509c",
+  "serverReportedArchiveSha256": "9ea0934b17e6fc0393e2f04064225aa5e7ac63df809b5107de68eb35e9b3ad82",
+  "attemptSha256": "35963b0184be454f2d354473058e6a46c2b9e734190ad7ea7200ae628cbf880f",
+  "harnessSha256": "1a80492d4394045b3459c53c98f8ec244a463497b5125462b4b155b2cb5109f3",
+  "attempt": {
+    "passed": 1,
+    "failed": 8,
+    "scope": "One static-byte/routing check passed; three activation checks and five fault cases failed to reach qualification."
+  },
+  "diagnostic": {
+    "documentReadyState": "complete",
+    "secureContext": true,
+    "serviceWorkerSupported": true,
+    "manualRegistration": "TypeError: A bad HTTP response code (401) was received when fetching the script.",
+    "activeRegistrations": 0,
+    "cacheNames": [],
+    "sameSwResourceWithServiceAccessHeader": 200
+  },
+  "interpretation": "The isolated service-access browser profile cannot authenticate native ServiceWorker script fetch. Normal owner sign-in was not tested; no conclusion that it has the same failure.",
+  "localValidation": {
+    "browserScenarios": {
+      "passed": 27,
+      "failed": 0,
+      "blocked": 0,
+      "physicalDevices": false
+    },
+    "workerVmTests": {
+      "passed": 29,
+      "failed": 0,
+      "scope": "In-memory event/Cache/network harness"
+    }
+  },
+  "ownerAction": "Open the separate private Site in a normal signed-in owner session and qualify first installation, offline reload of / and /index.html, draft recovery and explicit completion on physical iPhone/Samsung. Do not send credentials in chat."
+}
