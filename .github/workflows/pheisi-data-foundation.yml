@@ -1,7 +1,7 @@
 name: PHEISI isolated data foundation
 on:
   pull_request:
-    branches: [development/public-on]
+    branches: [development/public-on, review/pheisi-v2-frozen-preview]
     types: [opened, synchronize, reopened]
     paths:
       - 'product-v2/**'
