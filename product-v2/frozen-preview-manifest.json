@@ -1,0 +1,166 @@
+{
+  "schema": "pheisi-frozen-preview-v1",
+  "sourceCommit": "eb719248edad30f9290dab8fe4bd6b9a199f60d2",
+  "sourceTree": "bd0910ed7201a586936d21c0ebfe02d532964c8f",
+  "projectId": "appgprj_6ad0ea446798819185547a04e5655bc4",
+  "version": 1,
+  "deploymentId": "appgdep_6ad0fc3e04288191ae71fea01b1ecbaa",
+  "url": "https://pheisi-v2-mobile-20261015.shrewdalder64.chatgpt.site",
+  "serverReportedArchiveSha256": "a78653d7a2fbf9dfabd62b0369137fb12579abd64575c893b5f3ed8a25d7e157",
+  "previewDigest": "c31387f2ae30830ee8668a788c989fbdf3c35132b0dbb2089dbbc0e6ee599991",
+  "foundationSha256": "eb33bd8c39ed94a52d4fbeb2196d1fa6f5c44771d5307b73906c260c023e0de8",
+  "files": [
+    {
+      "sourcePath": ".gitignore",
+      "repositoryPath": "product-v2/mobile-preview-frozen/eb719248/.gitignore",
+      "mode": "100644",
+      "gitBlob": "0b0a54f9eba9b65dec4c0398fbdfda1aab6d7dc3",
+      "bytes": 45,
+      "sha256": "2b74d23fdbffd7ff0cfa016e13234a4172c4a700945eb2bb8b625dd522765337"
+    },
+    {
+      "sourcePath": ".openai/hosting.json",
+      "repositoryPath": "product-v2/mobile-preview-frozen/eb719248/provenance/site-hosting.json",
+      "mode": "100644",
+      "gitBlob": "4170fc7c97e8cd7d54d6cc4b1585baf10e150b80",
+      "bytes": 106,
+      "sha256": "4128d40b429ea9b70ec60fe2b1f9cb8696a85fa9b840bf7c576c3e8d8eba8d39"
+    },
+    {
+      "sourcePath": "README_RU.md",
+      "repositoryPath": "product-v2/mobile-preview-frozen/eb719248/README_RU.md",
+      "mode": "100644",
+      "gitBlob": "b9759985b07ab56ec64fe46c42448e465c12db1c",
+      "bytes": 4176,
+      "sha256": "a6e3038ce88dd4b0c89ea0d6bc500395f37465991e12262bad334eaae5718581"
+    },
+    {
+      "sourcePath": "VALIDATION_RU.md",
+      "repositoryPath": "product-v2/mobile-preview-frozen/eb719248/VALIDATION_RU.md",
+      "mode": "100644",
+      "gitBlob": "cb15aa24ad438076fc38461e55670fe4a91d6f94",
+      "bytes": 9557,
+      "sha256": "65f435eafc2952d9ae70262630c3526ee294d9e1c1612abe65d8e7c85613d740"
+    },
+    {
+      "sourcePath": "build-preview.cjs",
+      "repositoryPath": "product-v2/mobile-preview-frozen/eb719248/build-preview.cjs",
+      "mode": "100644",
+      "gitBlob": "e9b8bb48819c1702787c425d9d08bdc1050eed92",
+      "bytes": 3822,
+      "sha256": "0ccbf1815618591becc6a142f38fe4c80bc8d384cfea75e1b1e84b15e1ae2b3a"
+    },
+    {
+      "sourcePath": "dist/app.css",
+      "repositoryPath": "product-v2/mobile-preview-frozen/eb719248/dist/app.css",
+      "mode": "100644",
+      "gitBlob": "f2f80ac0f0566287fd8b6b192639847a16e3dd1d",
+      "bytes": 12767,
+      "sha256": "95d12899a06bc778f9421bf90b207c05454a588321907f1dfbebab6fdefcfab9"
+    },
+    {
+      "sourcePath": "dist/app.js",
+      "repositoryPath": "product-v2/mobile-preview-frozen/eb719248/dist/app.js",
+      "mode": "100644",
+      "gitBlob": "44597eddb8feff53c4de84112ae94ebd55059342",
+      "bytes": 43891,
+      "sha256": "a12b7147004228d1906a412126429fa8de9637a9ed88f4e8dc33a0ee1de2ebf0"
+    },
+    {
+      "sourcePath": "dist/foundation.mjs",
+      "repositoryPath": "product-v2/mobile-preview-frozen/eb719248/dist/foundation.mjs",
+      "mode": "100644",
+      "gitBlob": "43ab751fd30a7f078a82a9ffd3d66c8c34b7645c",
+      "bytes": 26284,
+      "sha256": "eb33bd8c39ed94a52d4fbeb2196d1fa6f5c44771d5307b73906c260c023e0de8"
+    },
+    {
+      "sourcePath": "dist/icon-192.png",
+      "repositoryPath": "product-v2/mobile-preview-frozen/eb719248/dist/icon-192.png",
+      "mode": "100644",
+      "gitBlob": "c1655751c11f68496e43aec448dc5a3072883878",
+      "bytes": 36361,
+      "sha256": "f46acccdbfbd3a2cfe856465d56867dd6c94288e059fdfd3cb1897e7067356bf"
+    },
+    {
+      "sourcePath": "dist/icon-512.png",
+      "repositoryPath": "product-v2/mobile-preview-frozen/eb719248/dist/icon-512.png",
+      "mode": "100644",
+      "gitBlob": "e1c425fbef6ed92e1c672450dba937c572fe45ad",
+      "bytes": 204172,
+      "sha256": "b93cd8d5f742f07b22de6ed6ee503edd6fcfbf2c8897b7402d72f82062990788"
+    },
+    {
+      "sourcePath": "dist/index.html",
+      "repositoryPath": "product-v2/mobile-preview-frozen/eb719248/dist/index.html",
+      "mode": "100644",
+      "gitBlob": "71551fbcc61d822d2a04e6aa5f4c62f027fe3ffd",
+      "bytes": 1072,
+      "sha256": "b3c63e4314b6dae643efc6296230ba5f55d289acc86f36e7f8ca3f8547bb6d0a"
+    },
+    {
+      "sourcePath": "dist/manifest.webmanifest",
+      "repositoryPath": "product-v2/mobile-preview-frozen/eb719248/dist/manifest.webmanifest",
+      "mode": "100644",
+      "gitBlob": "173b0224950973ff79739f5b5c07223c70da7390",
+      "bytes": 398,
+      "sha256": "762dbdb5ee2449b6d7db7a33227c74a027eff918d05343875967d9813d12bd76"
+    },
+    {
+      "sourcePath": "dist/preview-store.mjs",
+      "repositoryPath": "product-v2/mobile-preview-frozen/eb719248/dist/preview-store.mjs",
+      "mode": "100644",
+      "gitBlob": "8031782dc7d7d8eaade34550adf743ce1e39552f",
+      "bytes": 25235,
+      "sha256": "606643f08266468cf48c949ebecc768d86f29e09c7a9f9206a2d33a8c3512eff"
+    },
+    {
+      "sourcePath": "dist/register-sw.js",
+      "repositoryPath": "product-v2/mobile-preview-frozen/eb719248/dist/register-sw.js",
+      "mode": "100644",
+      "gitBlob": "7ab114e8df874f2967f6d0de588fc0ce57be594c",
+      "bytes": 268,
+      "sha256": "f3d584fd1df88df6b4bf4b6b7075fd9f3d0a8d4560aea30cee3ee9a075538bc7"
+    },
+    {
+      "sourcePath": "dist/sw.js",
+      "repositoryPath": "product-v2/mobile-preview-frozen/eb719248/dist/sw.js",
+      "mode": "100644",
+      "gitBlob": "fe661cb1448a46a983e144cac5aba15c52f95e2f",
+      "bytes": 3261,
+      "sha256": "89c3d343d9d31d32c338af65d14a9b74462df545e16be2183e7665800416b79b"
+    },
+    {
+      "sourcePath": "prepare-preview.cjs",
+      "repositoryPath": "product-v2/mobile-preview-frozen/eb719248/prepare-preview.cjs",
+      "mode": "100644",
+      "gitBlob": "8bf0254e5585f3a3125ddf8cc9b6debe3461dab1",
+      "bytes": 1626,
+      "sha256": "4c493fdbd75b0fbbdd215b2ca6c33dd9ae37ec91499df037eb364803f36abcc3"
+    },
+    {
+      "sourcePath": "preview-build.json",
+      "repositoryPath": "product-v2/mobile-preview-frozen/eb719248/preview-build.json",
+      "mode": "100644",
+      "gitBlob": "5202e57232443b2dc20688e5a9d7aa48963f0397",
+      "bytes": 1903,
+      "sha256": "4d72b5d6d3903f5920d2f2b5cbc023e60ce7aeedabba4f95e3fdb65aaf5c4cd6"
+    },
+    {
+      "sourcePath": "serve-preview.cjs",
+      "repositoryPath": "product-v2/mobile-preview-frozen/eb719248/serve-preview.cjs",
+      "mode": "100644",
+      "gitBlob": "1f84636a87d60b2c64e2e4b13cb708d24ac8e0c2",
+      "bytes": 1164,
+      "sha256": "6c32d2cba7e965a0ca2c85d74345f732d8be64b2e067855d89cd25e1ab516cc9"
+    },
+    {
+      "sourcePath": "tests/mobile-preview.test.cjs",
+      "repositoryPath": "product-v2/mobile-preview-frozen/eb719248/tests/mobile-preview.test.cjs",
+      "mode": "100644",
+      "gitBlob": "978b9de62b51a3c95cd2a5cd6e14e3430b6729e2",
+      "bytes": 44231,
+      "sha256": "9f95a219ec3f973c828f9e2bd132838a8f2602c824bd9a68e008aad4fe269f3e"
+    }
+  ]
+}

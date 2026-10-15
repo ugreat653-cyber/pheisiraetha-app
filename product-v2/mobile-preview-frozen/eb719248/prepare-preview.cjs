@@ -1,0 +1,17 @@
+'use strict';
+const fs = require('node:fs');
+const path = require('node:path');
+const root = __dirname;
+const dist = path.join(root, 'dist');
+fs.mkdirSync(dist, {recursive: true});
+const hostingPath = path.join(root, '.openai', 'hosting.json');
+const hosting = JSON.parse(fs.readFileSync(hostingPath, 'utf8'));
+if (hosting.project_id !== 'appgprj_6ad0ea446798819185547a04e5655bc4') throw Error('Wrong preview identity');
+hosting.static = {directory: 'dist'};
+fs.writeFileSync(hostingPath + '.tmp', JSON.stringify(hosting, null, 2) + '\n');
+fs.renameSync(hostingPath + '.tmp', hostingPath);
+fs.writeFileSync(path.join(root, '.gitignore'), '.browsers/\ntest-results/\nnode_modules/\n*.tar\n');
+fs.writeFileSync(path.join(dist, 'manifest.webmanifest'), JSON.stringify({name: 'PHEISIRAETHA v2 Preview', short_name: 'PHEISI', id: './', start_url: './', scope: './', display: 'standalone', background_color: '#091218', theme_color: '#091218', icons: [{src: './icon-192.png', sizes: '192x192', type: 'image/png'}, {src: './icon-512.png', sizes: '512x512', type: 'image/png'}]}, null, 2) + '\n');
+for (const file of ['icon-192.png', 'icon-512.png']) fs.copyFileSync(path.join(root, '..', 'source', file), path.join(dist, file));
+fs.writeFileSync(path.join(dist, 'register-sw.js'), "'use strict';\nif ('serviceWorker' in navigator && (location.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(location.hostname))) {\n  window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js', {scope: './'}).catch(() => {}); });\n}\n");
+console.log('Isolated static preview configured; no publication performed');

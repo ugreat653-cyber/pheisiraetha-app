@@ -1,0 +1,4 @@
+.browsers/
+test-results/
+node_modules/
+*.tar

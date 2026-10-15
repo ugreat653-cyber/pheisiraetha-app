@@ -1,0 +1,91 @@
+name: PHEISI isolated data foundation
+on:
+  pull_request:
+    branches: [development/public-on]
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'product-v2/**'
+      - 'docs/product-v2/**'
+      - '.github/workflows/pheisi-data-foundation.yml'
+permissions:
+  contents: read
+concurrency:
+  group: pheisi-data-foundation-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+jobs:
+  browser-storage:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact proposed foundation
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select exact Node
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903
+        with:
+          node-version: 24.19.0
+          package-manager-cache: false
+      - name: Verify preserved source and scope
+        run: node product-v2/verify-scope.cjs
+      - name: Prepare external browser driver
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools="$RUNNER_TEMP/pheisi-foundation-tools"
+          mkdir -p "$tools"
+          npm install --prefix "$tools" --no-save --ignore-scripts --no-audit --no-fund --package-lock=false playwright@1.62.1
+      - name: Qualify real browser transactions
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NODE_PATH="$RUNNER_TEMP/pheisi-foundation-tools/node_modules"
+          export PHEISI_BROWSER_EXECUTABLE=/opt/google/chrome/chrome
+          node --check product-v2/storage.mjs
+          node --test --test-reporter=spec product-v2/storage.test.cjs
+
+  frozen-preview:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact proposed snapshot
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select exact Node
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903
+        with:
+          node-version: 24.19.0
+          package-manager-cache: false
+      - name: Verify baseline and exact frozen bytes
+        run: |
+          node product-v2/verify-scope.cjs
+          node product-v2/verify-frozen-preview.cjs
+      - name: Prepare pinned external browser driver
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools="$RUNNER_TEMP/pheisi-preview-tools"
+          mkdir -p "$tools"
+          npm install --prefix "$tools" --no-save --ignore-scripts --no-audit --no-fund --package-lock=false playwright@1.62.1
+          PLAYWRIGHT_BROWSERS_PATH="$RUNNER_TEMP/pheisi-browsers" node "$tools/node_modules/playwright/cli.js" install --with-deps chromium webkit
+      - name: Run all frozen browser scenarios in temporary copy
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PREVIEW_PLAYWRIGHT="$RUNNER_TEMP/pheisi-preview-tools/node_modules/playwright"
+          export PLAYWRIGHT_BROWSERS_PATH="$RUNNER_TEMP/pheisi-browsers"
+          export PREVIEW_PROFILES=desktop,samsung,iphone-webkit
+          unset PREVIEW_CASES
+          stage="$RUNNER_TEMP/pheisi-frozen/mobile-preview"
+          node product-v2/verify-frozen-preview.cjs --stage "$stage"
+          node "$stage/build-preview.cjs"
+          node --test --test-reporter=spec "$stage/tests/mobile-preview.test.cjs"
+          node product-v2/verify-frozen-preview.cjs --result "$stage/test-results/MOBILE_PREVIEW_RESULT.json"
+          node product-v2/verify-frozen-preview.cjs
